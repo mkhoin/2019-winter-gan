@@ -1,10 +1,17 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.datasets import mnist
-from keras.layers import Dense, Flatten, Reshape
-from keras.layers.advanced_activations import LeakyReLU
-from keras.models import Sequential
-from keras.optimizers import Adam
+import os
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.layers import Dense, Flatten, Reshape
+from tensorflow.keras.layers import LeakyReLU
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
+
+
+# create directories
+OUT_DIR = "./ch1-output/"
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
 
 
 # In[2]:
@@ -115,7 +122,7 @@ accuracies = []
 iteration_checkpoints = []
 
 
-def train(iterations, batch_size, sample_interval):
+def train_GAN(iterations, batch_size, sample_interval):
 
     # Load the MNIST dataset
     (X_train, _), (_, _) = mnist.load_data()
@@ -172,13 +179,13 @@ def train(iterations, batch_size, sample_interval):
                   (iteration + 1, d_loss, 100.0 * accuracy, g_loss))
 
             # Output a sample of generated image
-            sample_images(generator)
+            sample_images(generator, iteration)
 
 
 # In[8]:
 
 
-def sample_images(generator, image_grid_rows=4, image_grid_columns=4):
+def sample_images(generator, iteration, image_grid_rows=4, image_grid_columns=4):
 
     # Sample random noise
     z = np.random.normal(0, 1, (image_grid_rows * image_grid_columns, z_dim))
@@ -203,6 +210,9 @@ def sample_images(generator, image_grid_rows=4, image_grid_columns=4):
             axs[i, j].imshow(gen_imgs[cnt, :, :, 0], cmap='gray')
             axs[i, j].axis('off')
             cnt += 1
+    path = os.path.join(OUT_DIR, "img-{}".format(iteration + 1))
+    plt.savefig(path)
+    plt.close()
 
 
 # ## Train the GAN and Inspect Output
@@ -213,12 +223,12 @@ def sample_images(generator, image_grid_rows=4, image_grid_columns=4):
 
 
 # Set hyperparameters
-iterations = 20000
+iterations = 60000
 batch_size = 128
 sample_interval = 1000
 
 # Train the GAN for the specified number of iterations
-train(iterations, batch_size, sample_interval)
+train_GAN(iterations, batch_size, sample_interval)
 
 
 # In[10]:
@@ -237,6 +247,11 @@ plt.title("Training Loss")
 plt.xlabel("Iteration")
 plt.ylabel("Loss")
 plt.legend()
+plt.savefig(os.path.join(OUT_DIR, 'loss-plt.png'))
+plt.close()
+
+
+
 
 
 # In[11]:
@@ -255,6 +270,8 @@ plt.title("Discriminator Accuracy")
 plt.xlabel("Iteration")
 plt.ylabel("Accuracy (%)")
 plt.legend()
+plt.savefig(os.path.join(OUT_DIR, 'acc-plt.png'))
+plt.close()
 
 
 # ----
