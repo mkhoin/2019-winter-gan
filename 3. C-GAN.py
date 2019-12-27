@@ -215,7 +215,7 @@ def calculate_age(taken, dob):
 def load_data(wiki_dir, dataset='wiki'):
     # Load the wiki.mat file
     #meta = loadmat(os.path.join(wiki_dir, "{}.mat".format(dataset)))
-    meta = loadmat(os.path.join(wiki_dir, "aging-1000.mat"))
+    meta = loadmat(os.path.join(wiki_dir, "chap3.mat"))
 
     # Load the list of all files
     # meta contains 4 dimesional dictionary
