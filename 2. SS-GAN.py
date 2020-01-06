@@ -1,20 +1,20 @@
-#!/usr/bin/env python
-# coding: utf-8
+# MNIST Hand-written Digit Generation with Semi-Supervied GAN
+# Our GAN is built using CNNs
+# January 4, 2020
+# Sung Kyu Lim
+# Georgia Institute of Technology
+# limsk@ece.gatech.edu
 
-# # Chapter 7: Semi-Supervised GAN
 
-# In[1]:
-
-
-
+# import packages
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 from keras import backend as K
-
 from keras.datasets import mnist
-from keras.layers import (Activation, BatchNormalization, Concatenate, Dense,
-                          Dropout, Flatten, Input, Lambda, Reshape)
+from keras.layers import Activation, BatchNormalization, Concatenate, Dense
+from keras.layers import Dropout, Flatten, Input, Lambda, Reshape
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import Conv2D, Conv2DTranspose
 from keras.models import Model, Sequential
@@ -22,179 +22,121 @@ from keras.optimizers import Adam
 from keras.utils import to_categorical
 
 
-# ## Dataset
-
-# In[2]:
-
-
-class Dataset:
-    def __init__(self, num_labeled):
-
-        # Number labeled examples to use for training
-        self.num_labeled = num_labeled
-
-        # Load the MNIST dataset
-        (self.x_train, self.y_train), (self.x_test,
-                                       self.y_test) = mnist.load_data()
-
-        def preprocess_imgs(x):
-            # Rescale [0, 255] grayscale pixel values to [-1, 1]
-            x = (x.astype(np.float32) - 127.5) / 127.5
-            # Expand image dimensions to width x height x channels
-            x = np.expand_dims(x, axis=3)
-            return x
-
-        def preprocess_labels(y):
-            return y.reshape(-1, 1)
-
-        # Training data
-        self.x_train = preprocess_imgs(self.x_train)
-        self.y_train = preprocess_labels(self.y_train)
-
-        # Testing data
-        self.x_test = preprocess_imgs(self.x_test)
-        self.y_test = preprocess_labels(self.y_test)
-
-    def batch_labeled(self, batch_size):
-        # Get a random batch of labeled images and their labels
-        idx = np.random.randint(0, self.num_labeled, batch_size)
-        imgs = self.x_train[idx]
-        labels = self.y_train[idx]
-        return imgs, labels
-
-    def batch_unlabeled(self, batch_size):
-        # Get a random batch of unlabeled images
-        idx = np.random.randint(self.num_labeled, self.x_train.shape[0],
-                                batch_size)
-        imgs = self.x_train[idx]
-        return imgs
-
-    def training_set(self):
-        x_train = self.x_train[range(self.num_labeled)]
-        y_train = self.y_train[range(self.num_labeled)]
-        return x_train, y_train
-
-    def test_set(self):
-        return self.x_test, self.y_test
-
-
-# In[3]:
-
-
-# Number of labeled examples to use (rest will be used as unlabeled)
-num_labeled = 100
-
-dataset = Dataset(num_labeled)
-
-
-# # Semi-Supervied GAN
-
-# In[4]:
-
-
-img_rows = 28
-img_cols = 28
-channels = 1
-
 # Input image dimensions
-img_shape = (img_rows, img_cols, channels)
+img_shape = (28, 28, 1)
 
-# Size of the noise vector, used as input to the Generator
-z_dim = 100
+# size of the noise vector, used as input to the Generator
+noise = 100
 
 # Number of classes in the dataset
 num_classes = 10
 
+# Set hyperparameters
+epochs = 1000
+batch_size = 100
+sample_interval = 100
 
-# ## Generator
+# Number of labeled examples to use (rest will be used as unlabeled)
+num_labeled = 100
 
-# In[5]:
+
+# create output directory
+OUT_DIR = "./ch2-output/"
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
 
 
-def build_generator(z_dim):
+# get a random batch of labeled images and their labels
+def batch_labeled():
+    idx = np.random.randint(0, num_labeled, batch_size)
+    imgs = X_train[idx]
+    labels = Y_train[idx]
+
+    return imgs, labels
+
+
+# get a random batch of unlabeled images
+def batch_unlabeled():
+    idx = np.random.randint(num_labeled, X_train.shape[0], batch_size)
+    imgs = X_train[idx]
+    return imgs
+
+
+# get the labeled training set
+def training_set():
+    x = X_train[range(num_labeled)]
+    y = Y_train[range(num_labeled)]
+
+    return x, y
+
+
+# get the test set
+def test_set():
+    return X_test, Y_test
+
+
+# build CNN-based generator
+# input: one dimensional noise array 
+# output: 28 x 28 x 1 fake image
+def build_generator(noise):
 
     model = Sequential()
 
-    # Reshape input into 7x7x256 tensor via a fully connected layer
-    model.add(Dense(256 * 7 * 7, input_dim=z_dim))
+    # reshape noise input into 7x7x256 tensor via a fully connected layer
+    model.add(Dense(256 * 7 * 7, input_dim = noise))
     model.add(Reshape((7, 7, 256)))
 
-    # Transposed convolution layer, from 7x7x256 into 14x14x128 tensor
-    model.add(Conv2DTranspose(128, kernel_size=3, strides=2, padding='same'))
-
-    # Batch normalization
+    # 1st transposed convolution block
+    # dimension becomes 14 x 14 x 128
+    model.add(Conv2DTranspose(128, kernel_size = 3, strides = 2, padding = 'same'))
     model.add(BatchNormalization())
+    model.add(LeakyReLU(alpha = 0.01))
 
-    # Leaky ReLU activation
-    model.add(LeakyReLU(alpha=0.01))
-
-    # Transposed convolution layer, from 14x14x128 to 14x14x64 tensor
-    model.add(Conv2DTranspose(64, kernel_size=3, strides=1, padding='same'))
-
-    # Batch normalization
+    # 2nd transposed convolution block
+    # dimension becomes 14 x 14 x 64
+    # image size stays the same
+    model.add(Conv2DTranspose(64, kernel_size = 3, strides = 1, padding = 'same'))
     model.add(BatchNormalization())
+    model.add(LeakyReLU(alpha = 0.01))
 
-    # Leaky ReLU activation
-    model.add(LeakyReLU(alpha=0.01))
+    # 3rd transposed convolution block
+    # dimension becomes 28 x 28 x 1
+    model.add(Conv2DTranspose(1, kernel_size = 3, strides = 2, padding = 'same'))
 
-    # Transposed convolution layer, from 14x14x64 to 28x28x1 tensor
-    model.add(Conv2DTranspose(1, kernel_size=3, strides=2, padding='same'))
-
-    # Output layer with tanh activation
+    # output layer with tanh activation
     model.add(Activation('tanh'))
+
+    # print the summary of generator
+    print('\n=== Generator summary')
+    model.summary()
 
     return model
 
 
-# ## Discriminator
-
-# In[6]:
-
-
-def build_discriminator_net(img_shape):
+# build CNN-based discriminator (common part)
+# input: 28 x 28 x 1 image (real or fake) 
+# output: 10 dense neuron outputs
+def build_disc_common(img_shape):
 
     model = Sequential()
 
-    # Convolutional layer, from 28x28x1 into 14x14x32 tensor
-    model.add(
-        Conv2D(32,
-               kernel_size=3,
-               strides=2,
-               input_shape=img_shape,
-               padding='same'))
+    # 1st convolutional block
+    # dimension becomes 14 x 14 x 32
+    model.add(Conv2D(32, kernel_size = 3, strides = 2,
+               input_shape = img_shape, padding = 'same'))
+    model.add(LeakyReLU(alpha = 0.01))
 
-    # Leaky ReLU activation
-    model.add(LeakyReLU(alpha=0.01))
-
-    # Convolutional layer, from 14x14x32 into 7x7x64 tensor
-    model.add(
-        Conv2D(64,
-               kernel_size=3,
-               strides=2,
-               input_shape=img_shape,
-               padding='same'))
-
-    # Batch normalization
+    # 2nd convolutional block
+    # dimension becomes 7 x 7 x 64
+    model.add(Conv2D(64, kernel_size = 3, strides = 2, padding = 'same'))
     model.add(BatchNormalization())
+    model.add(LeakyReLU(alpha = 0.01))
 
-    # Leaky ReLU activation
-    model.add(LeakyReLU(alpha=0.01))
-
-    # Convolutional layer, from 7x7x64 tensor into 3x3x128 tensor
-    model.add(
-        Conv2D(128,
-               kernel_size=3,
-               strides=2,
-               input_shape=img_shape,
-               padding='same'))
-
-    # Batch normalization
+    # 3rd convolutional block
+    # dimension becomes 3 x 3 x 128
+    model.add(Conv2D(128, kernel_size=3, strides = 2, padding = 'same'))
     model.add(BatchNormalization())
-
-    # Leaky ReLU activation
-    model.add(LeakyReLU(alpha=0.01))
-
-    # Droupout
+    model.add(LeakyReLU(alpha = 0.01))
     model.add(Dropout(0.5))
 
     # Flatten the tensor
@@ -203,300 +145,257 @@ def build_discriminator_net(img_shape):
     # Fully connected layer with num_classes neurons
     model.add(Dense(num_classes))
 
+    # print the summary of discriminator
+    print('\n=== Discriminator (common) summary')
+    model.summary()
+
     return model
 
 
-# In[7]:
-
-
-def build_discriminator_supervised(discriminator_net):
+# add softmax activation at the end of discriminator
+# giving predicted probability distribution over the real classes
+# input: 10 values
+# output: 10 softmax probability values
+def build_disc_super(disc_common):
 
     model = Sequential()
-
-    model.add(discriminator_net)
-
-    # Softmax activation, giving predicted probability distribution over the real classes
+    model.add(disc_common)
     model.add(Activation('softmax'))
 
     return model
 
 
-# In[8]:
-
-
-def build_discriminator_unsupervised(discriminator_net):
+# add sigmoid activation at the end of discriminator
+# to decide real vs. fake 
+# input: 10 values
+# output: single probability value 
+def build_disc_unsuper(disc_common):
 
     model = Sequential()
-
-    model.add(discriminator_net)
-
-    def predict(x):
-        # Transform distribution over real classes into a binary real-vs-fake probability
-        prediction = 1.0 - (1.0 /
-                            (K.sum(K.exp(x), axis=-1, keepdims=True) + 1.0))
-        return prediction
-
-    # 'Real-vs-fake' output neuron defined above
-    model.add(Lambda(predict))
+    model.add(disc_common)
+    model.add(Dense(1, activation = 'sigmoid'))
 
     return model
 
 
-# ## Build the Model
-
-# In[9]:
-
-
+# build GAN
+# we connect the output of generator 
+# to the input of discriminator
 def build_gan(generator, discriminator):
 
     model = Sequential()
-
-    # Combined Generator -> Discriminator model
     model.add(generator)
     model.add(discriminator)
+
+    print('\n=== GAN summary')
+    model.summary()
 
     return model
 
 
-# ### Discriminator
+#############
+# BUILD GAN #
+#############
 
-# In[10]:
-
-
-# Core Discriminator network:
-# These layers are shared during supervised and unsupervised training
-discriminator_net = build_discriminator_net(img_shape)
-
-# Build & compile the Discriminator for supervised training
-discriminator_supervised = build_discriminator_supervised(discriminator_net)
-discriminator_supervised.compile(loss='categorical_crossentropy',
-                                 metrics=['accuracy'],
-                                 optimizer=Adam())
-
-# Build & compile the Discriminator for unsupervised training
-discriminator_unsupervised = build_discriminator_unsupervised(discriminator_net)
-discriminator_unsupervised.compile(loss='binary_crossentropy',
-                                   optimizer=Adam())
+# build the common discriminator
+# these layers are shared between supervised and unsupervised training
+disc_common = build_disc_common(img_shape)
 
 
-# ### Generator
-
-# In[11]:
-
-
-# Build the Generator
-generator = build_generator(z_dim)
-
-# Keep Discriminator’s parameters constant for Generator training
-discriminator_unsupervised.trainable = False
-
-# Build and compile GAN model with fixed Discriminator to train the Generator
-# Note that we are using the Discriminator version with unsupervised output
-gan = build_gan(generator, discriminator_unsupervised)
-gan.compile(loss='binary_crossentropy', optimizer=Adam())
+# build & compile the discriminator for supervised training
+disc_super = build_disc_super(disc_common)
+disc_super.compile(optimizer = 'Adam', loss = 'categorical_crossentropy',
+    metrics = ['accuracy'])
 
 
-# ## Training
-
-# In[12]:
-
-
-supervised_losses = []
-iteration_checkpoints = []
+# build & compile the discriminator for unsupervised training
+disc_unsuper = build_disc_unsuper(disc_common)
+disc_unsuper.compile(optimizer = 'Adam', loss = 'binary_crossentropy')
 
 
-def train(iterations, batch_size, sample_interval):
+# build generator
+generator = build_generator(noise)
 
-    # Labels for real images: all ones
+
+# keep discriminator’s parameters constant for generator training
+disc_unsuper.trainable = False
+
+
+# build & compile GAN model with fixed discriminator to train generator
+# we are using the discriminator with unsupervised output
+gan = build_gan(generator, disc_unsuper)
+gan.compile(optimizer = 'adam', loss = 'binary_crossentropy')
+
+
+#############
+# TRAIN GAN #
+#############
+
+
+# train discriminator for unsupervised version
+def train_disc():
+
+    # labels for real images: all ones
     real = np.ones((batch_size, 1))
 
-    # Labels for fake images: all zeros
+    # labels for fake images: all zeros
     fake = np.zeros((batch_size, 1))
+    
+    # get labeled examples
+    imgs, labels = batch_labeled()
+    labels = to_categorical(labels, num_classes)
 
-    for iteration in range(iterations):
+    # get unlabeled examples
+    imgs_unlabeled = batch_unlabeled()
 
-        # -------------------------
-        #  Train the Discriminator
-        # -------------------------
+    # generate a batch of fake images
+    z = np.random.normal(0, 1, (batch_size, noise))
+    gen_imgs = generator.predict(z)
 
-        # Get labeled examples
-        imgs, labels = dataset.batch_labeled(batch_size)
+    # supervised train on real labeled examples
+    d_loss_super, _ = disc_super.train_on_batch(imgs, labels)
 
-        # One-hot encode labels
-        labels = to_categorical(labels, num_classes=num_classes)
+    # unsupervised train on real unlabeled examples
+    d_loss_real = disc_unsuper.train_on_batch(imgs_unlabeled, real)
 
-        # Get unlabeled examples
-        imgs_unlabeled = dataset.batch_unlabeled(batch_size)
+    # unsupervised train on fake examples
+    d_loss_fake = disc_unsuper.train_on_batch(gen_imgs, fake)
 
-        # Generate a batch of fake images
-        z = np.random.normal(0, 1, (batch_size, z_dim))
-        gen_imgs = generator.predict(z)
+    d_loss_unsuper = 0.5 * np.add(d_loss_real, d_loss_fake)
 
-        # Train on real labeled examples
-        d_loss_supervised, accuracy = discriminator_supervised.train_on_batch(imgs, labels)
+    return d_loss_super, d_loss_unsuper
 
-        # Train on real unlabeled examples
-        d_loss_real = discriminator_unsupervised.train_on_batch(
-            imgs_unlabeled, real)
 
-        # Train on fake examples
-        d_loss_fake = discriminator_unsupervised.train_on_batch(gen_imgs, fake)
+# train generator
+def train_gen():
 
-        d_loss_unsupervised = 0.5 * np.add(d_loss_real, d_loss_fake)
+    # generate a batch of fake images
+    z = np.random.normal(0, 1, (batch_size, noise))
 
-        # ---------------------
-        #  Train the Generator
-        # ---------------------
+    # train generator
+    g_loss = gan.train_on_batch(z, np.ones((batch_size, 1)))
 
-        # Generate a batch of fake images
-        z = np.random.normal(0, 1, (batch_size, z_dim))
-        gen_imgs = generator.predict(z)
+    return g_loss
 
-        # Train Generator
-        g_loss = gan.train_on_batch(z, np.ones((batch_size, 1)))
 
-        if (iteration + 1) % sample_interval == 0:
+# main training routine
+def train():
 
-            # Save Discriminator supervised classification loss to be plotted after training
-            supervised_losses.append(d_loss_supervised)
-            iteration_checkpoints.append(iteration + 1)
+    print('\n=== GAN TRAINING BEGINS')
+    for itr in range(epochs):
+        d_loss_s, d_loss_u = train_disc()
+        g_loss = train_gen()
+
+        if (itr + 1) % sample_interval == 0:
 
             # Output training progress
-            print(
-                "%d [D loss supervised: %.4f, acc.: %.2f%%] [D loss unsupervised: %.4f] [G loss: %f]"
-                % (iteration + 1, d_loss_supervised, 100 * accuracy,
-                   d_loss_unsupervised, g_loss))
+            print("%d [D loss super: %.4f], [D loss unsuper: %.4f], [G loss: %f]" 
+                % (itr + 1, d_loss_s, d_loss_u, g_loss))
+
+            # Output a sample of generated image
+            sample_images(itr)                
 
 
-# ## Train the Model and Inspect Output
+def sample_images(itr):
 
-# Note that the `'Discrepancy between trainable weights and collected trainable'` warning from Keras is expected. It is by design: The Generator's trainable parameters are intentionally held constant during Discriminator training, and vice versa.
+    row = col = 4
 
-# In[13]:
+    # Sample random noise
+    z = np.random.normal(0, 1, (row * col, noise))
 
+    # generate 16 fake images from random noise
+    fake_imgs = generator.predict(z)
 
-# Set hyperparameters
-iterations = 8000
-batch_size = 32
-sample_interval = 800
+    # rescale image pixel values to [0, 1]
+    fake_imgs = 0.5 * fake_imgs + 0.5
 
-# Train the SGAN for the specified number of iterations
-train(iterations, batch_size, sample_interval)
+    # set image grid
+    _, axs = plt.subplots(row, col, figsize = (row, col),
+        sharey = True, sharex = True)
 
+    cnt = 0
+    for i in range(row):
+        for j in range(col):
 
-# In[14]:
+            # output a grid of images
+            axs[i, j].imshow(fake_imgs[cnt, :, :, 0], cmap = 'gray')
+            axs[i, j].axis('off')
+            cnt += 1
 
-
-losses = np.array(supervised_losses)
-
-# Plot Discriminator supervised loss
-plt.figure(figsize=(15, 5))
-plt.plot(iteration_checkpoints, losses, label="Discriminator loss")
-
-plt.xticks(iteration_checkpoints, rotation=90)
-
-plt.title("Discriminator – Supervised Loss")
-plt.xlabel("Iteration")
-plt.ylabel("Loss")
-plt.legend()
+    path = os.path.join(OUT_DIR, "img-{}".format(itr + 1))
+    plt.savefig(path)
+    plt.close()
 
 
-# ## SGAN Classifier – Training and Test Accuracy 
+##################
+# MAIN EXECUTION #
+##################
 
-# In[15]:
+# read and pre-process MNIST dataset
+(X_train, Y_train), (X_test, Y_test) = mnist.load_data()
+X_train = X_train.reshape(60000, 28, 28, 1)
+Y_train = Y_train.reshape(60000, 1)
+X_test = X_test.reshape(10000, 28, 28, 1)
+Y_test = Y_test.reshape(10000, 1)
 
-
-x, y = dataset.training_set()
-y = to_categorical(y, num_classes=num_classes)
-
-# Compute classification accuracy on the training set
-_, accuracy = discriminator_supervised.evaluate(x, y)
-print("Training Accuracy: %.2f%%" % (100 * accuracy))
-
-
-# In[16]:
-
-
-x, y = dataset.test_set()
-y = to_categorical(y, num_classes=num_classes)
-
-# Compute classification accuracy on the test set
-_, accuracy = discriminator_supervised.evaluate(x, y)
-print("Test Accuracy: %.2f%%" % (100 * accuracy))
+X_train = (X_train.astype(np.float32) - 127.5) / 127.5
+X_test = (X_test.astype(np.float32) - 127.5) / 127.5
 
 
-# ---
-
-# # Fully-Supervised Classifier
-
-# In[17]:
+# train GAN for the specified number of epochs
+train()
 
 
-# Fully supervised classifier with the same network architecture as the SGAN Discriminator
-mnist_classifier = build_discriminator_supervised(build_discriminator_net(img_shape))
-mnist_classifier.compile(loss='categorical_crossentropy',
-                         metrics=['accuracy'],
-                         optimizer=Adam())
+#################################
+# SEMI-SUPERVISED DISCRIMINATOR #
+#################################
+
+# evaluating semi-supervised trained dsicriminator
+# compute classification accuracy on the training set
+print('\n=== SEMI-SUPERVISED DISCRMINATOR EVALUATION')
+x, y = training_set()
+y = to_categorical(y, num_classes = num_classes)
+_, accuracy = disc_super.evaluate(x, y, verbose = 0)
+print("Training accuracy: %.2f%%" % (100 * accuracy))
 
 
-# In[18]:
+# compute classification accuracy on the test set
+x, y = test_set()
+y = to_categorical(y, num_classes = num_classes)
+_, accuracy = disc_super.evaluate(x, y, verbose = 0)
+print("Test accuracy: %.2f%%" % (100 * accuracy))
 
 
-imgs, labels = dataset.training_set()
+##################################
+# FULLY SUPERVISED DISCRIMINATOR #
+##################################
 
-# One-hot encode labels
-labels = to_categorical(labels, num_classes=num_classes)
-
-# Train the classifier
-training = mnist_classifier.fit(x=imgs,
-                                y=labels,
-                                batch_size=32,
-                                epochs=30,
-                                verbose=1)
-losses = training.history['loss']
-accuracies = training.history['acc']
+# use the same network architecture as the SS-GAN discriminator
+fully_super = build_disc_super(build_disc_common(img_shape))
+fully_super.compile(loss = 'categorical_crossentropy',
+    metrics = ['accuracy'], optimizer = 'Adam')
 
 
-# In[19]:
+# process train set
+imgs, labels = training_set()
+labels = to_categorical(labels, num_classes = num_classes)
 
 
-# Plot classification loss
-plt.figure(figsize=(10, 5))
-plt.plot(np.array(losses), label="Loss")
-plt.title("Classification Loss")
-plt.legend()
+# train the classifier using keras fitting function, not GAN
+training = fully_super.fit(x = imgs, y = labels, batch_size = batch_size,
+    epochs = epochs, verbose = 0)
 
 
-# In[20]:
+# compute classification accuracy on the training set
+print('\n=== FULLY-SUPERVISED DISCRMINATOR EVALUATION')
+x, y = training_set()
+y = to_categorical(y, num_classes = num_classes)
+_, accuracy = fully_super.evaluate(x, y, verbose = 0)
+print("Training accuracy: %.2f%%" % (100 * accuracy))
 
 
-# Plot classification accuracy
-plt.figure(figsize=(10, 5))
-plt.plot(np.array(accuracies), label="Accuracy")
-plt.title("Classification Accuracy")
-plt.legend()
-
-
-# In[21]:
-
-
-x, y = dataset.training_set()
-y = to_categorical(y, num_classes=num_classes)
-
-# Compute classification accuracy on the training set
-_, accuracy = mnist_classifier.evaluate(x, y)
-print("Training Accuracy: %.2f%%" % (100 * accuracy))
-
-
-# In[22]:
-
-
-x, y = dataset.test_set()
-y = to_categorical(y, num_classes=num_classes)
-
-# Compute classification accuracy on the test set
-_, accuracy = mnist_classifier.evaluate(x, y)
-print("Test Accuracy: %.2f%%" % (100 * accuracy))
-
-
-# ---
+# compute classification accuracy on the test set
+x, y = test_set()
+y = to_categorical(y, num_classes = num_classes)
+_, accuracy = fully_super.evaluate(x, y, verbose = 0)
+print("Test accuracy: %.2f%%" % (100 * accuracy))
