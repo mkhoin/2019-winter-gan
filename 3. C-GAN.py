@@ -564,17 +564,15 @@ def build_fr_model(input_shape):
 
     x = embedder_model(input_layer)
     output = Lambda(lambda x: K.l2_normalize(x, axis = -1))(x)
+    model = Model(inputs = [input_layer], outputs = [output])
 
-    model = Model(inputs=[input_layer], outputs=[output])
-    print('\n=== Face recognizer summary')
+    print('\n=== Resnet face recognizer summary')
     model.summary()
-    exit()
 
     return model
 
 
-if TRAIN_GAN_WITH_FR:
-
+def build_new_GAN():
     # load the encoder network
     encoder = build_encoder()
     encoder.load_weights("ch3-output/encoder.h5")
@@ -593,31 +591,42 @@ if TRAIN_GAN_WITH_FR:
     fr_model.trainable = False
 
     # input layers
-    input_image = Input(shape=(64, 64, 3))
-    input_label = Input(shape=(6,))
+    input_image = Input(shape = image_shape)
+    input_label = Input(shape = (num_class,))
 
-    # Use the encoder and the generator network
-    latent0 = encoder(input_image)
-    gen_images = generator([latent0, input_label])
+    # combine encoder and generator 
+    latent = encoder(input_image)
+    gen_images = generator([latent, input_label])
 
-    # Resize images to the desired shape
-    resized_images = Lambda(lambda x: K.resize_images(gen_images, height_factor=3, width_factor=3,
-                                                        data_format='channels_last'))(gen_images)
+    # increase the image size by 3x
+    resized_images = Lambda(lambda x: K.resize_images(gen_images, 
+        height_factor = 3, width_factor = 3,
+        data_format = 'channels_last'))(gen_images)
+
+    # give the enlarged image to resnet to obtain 128 features
     embeddings = fr_model(resized_images)
 
-    # Create a Keras model and specify the inputs and outputs for the network
-    fr_GAN_model = Model(inputs=[input_image, input_label], outputs=[embeddings])
+    # create a new GAN model
+    fr_GAN_model = Model(inputs = [input_image, input_label], outputs = [embeddings])
+    print('\n=== Face recognizer GAN summary')
+    fr_GAN_model.summary()
 
-    # Compile the model
-    fr_GAN_model.compile(loss=euclidean_loss, optimizer='adam')
+    # compile the model
+    fr_GAN_model.compile(loss = euclidean_loss, optimizer = 'adam')
+
+    return image_resizer, fr_model, fr_GAN_model
+
+
+if TRAIN_GAN_WITH_FR:
+    # build a new GAN using encoder, generator, and resnet
+    image_resizer, fr_model, fr_GAN_model = build_new_GAN()
 
     for epoch in range(epochs):
         print("Epoch:", epoch)
 
-        reconstruction_losses = []
-
         iter = int(len(images) / batch_size)
         print("Number of batches:", iter)
+
         for index in range(iter):
             print("Batch:", index + 1)
 
@@ -634,8 +643,6 @@ if TRAIN_GAN_WITH_FR:
             reconstruction_loss = fr_GAN_model.train_on_batch([img_batch, y_batch], real_embeddings)
 
             print("Reconstruction loss:", reconstruction_loss)
-
-            reconstruction_losses.append(reconstruction_loss)
 
         img_batch = images[0:batch_size]
         img_batch = img_batch / 127.5 - 1.0
