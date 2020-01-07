@@ -1,6 +1,5 @@
-# MNIST Hand-written Digit Generation with Semi-Supervied GAN
-# Our GAN is built using CNNs
-# January 4, 2020
+# Face Aging Using Conditional GAN
+# January 7, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -39,7 +38,7 @@ if not os.path.exists(OUT_DIR):
 
 # hyper-parameters and constants
 # for good results: epoch = 500, batch = 100
-epochs = 10
+epochs = 2
 batch_size = 100
 noise = 100
 num_class = 6
@@ -51,9 +50,9 @@ fr_image_shape = (192, 192, 3)
 
 # program control option 1: on-off-off
 # program control option 2: on-on-off then off-off-on
-TRAIN_GAN = False
+TRAIN_GAN = True
 TRAIN_ENCODER = False
-TRAIN_GAN_WITH_FR = True
+TRAIN_GAN_WITH_FR = False
 
 
 # encoder network
@@ -420,7 +419,7 @@ def train_gen():
     return g_loss
 
 
-# test the generator with the first batch
+# test the generator with the first five images
 # then save the resulting image files
 def test_gen(epoch):
 
@@ -469,7 +468,7 @@ if TRAIN_GAN:
             # call generator training function
             g_loss = train_gen()
 
-            print('   Iter:', index, ', d_loss: %.4f' % d_loss, 
+            print('   Batch:', index, ', d_loss: %.4f' % d_loss, 
                 ', g_loss: %.4f' % g_loss)
         test_gen(epoch)
 
@@ -521,7 +520,7 @@ if TRAIN_ENCODER:
             # train encoder that maps images into noise
             e_loss = encoder.train_on_batch(fakes, z_batch)
 
-            print('   Iter:', index, ', e_loss: %.4f' % e_loss)
+            print('   Batch:', index, ', e_loss: %.4f' % e_loss)
 
     # save the encoder model
     encoder.save_weights("ch3-output/encoder.h5")
@@ -541,7 +540,7 @@ def build_image_resizer():
 
     model = Model(input = [input_layer], outputs = [resized_images])
 
-    print('\n=== IMAGE RESIZER summary')
+    print('\n=== Image resizer summary')
     model.summary()
 
     return model
@@ -617,45 +616,42 @@ def build_new_GAN():
     return image_resizer, fr_model, fr_GAN_model
 
 
+# training the new GAN so that the 128 feature extracted by GAN
+# becomes similar to the 128 features extracted by resnet
+# both encoder and generator improve through this process
 if TRAIN_GAN_WITH_FR:
+
     # build a new GAN using encoder, generator, and resnet
     image_resizer, fr_model, fr_GAN_model = build_new_GAN()
 
     for epoch in range(epochs):
         print("Epoch:", epoch)
 
+        # calculate the total number of iterations needed in each epoch
         iter = int(len(images) / batch_size)
-        print("Number of batches:", iter)
 
         for index in range(iter):
-            print("Batch:", index + 1)
-
+            # fetch the next batch of images
             img_batch = images[index * batch_size:(index + 1) * batch_size]
             img_batch = img_batch / 127.5 - 1.0
             img_batch = img_batch.astype(np.float32)
 
+            # age category data
             y_batch = cats[index * batch_size:(index + 1) * batch_size]
 
+            # resized images
             img_batch_resized = image_resizer.predict_on_batch(img_batch)
 
-            real_embeddings = fr_model.predict_on_batch(img_batch_resized)
+            # embedding with resnet
+            real = fr_model.predict_on_batch(img_batch_resized)
 
-            reconstruction_loss = fr_GAN_model.train_on_batch([img_batch, y_batch], real_embeddings)
+            # train the new GAN and compute loss
+            loss = fr_GAN_model.train_on_batch([img_batch, y_batch], real)
 
-            print("Reconstruction loss:", reconstruction_loss)
-
-        img_batch = images[0:batch_size]
-        img_batch = img_batch / 127.5 - 1.0
-        img_batch = img_batch.astype(np.float32)
-
-        y_batch = cats[0:batch_size]
-        z_noise = np.random.normal(0, 1, size=(batch_size, noise))
-
-        gen_images = generator.predict_on_batch([z_noise, y_batch])
-
-        for i, img in enumerate(gen_images[:5]):
-            save_rgb_img(img, path="ch3-output/img_opt_{}_{}.png".format(epoch, i))
+            print('   Batch:', index, ', loss: %.4f' % loss)
+        test_gen(epoch)
 
     # Save improved weights for both of the networks
     generator.save_weights("ch3-output/generator_optimized.h5")
     encoder.save_weights("ch3-output/encoder_optimized.h5")
+
