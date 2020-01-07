@@ -650,8 +650,3 @@ if TRAIN_GAN_WITH_FR:
 
             print('   Batch:', index, ', loss: %.4f' % loss)
         test_gen(epoch)
-
-    # Save improved weights for both of the networks
-    generator.save_weights("ch3-output/generator_optimized.h5")
-    encoder.save_weights("ch3-output/encoder_optimized.h5")
-
