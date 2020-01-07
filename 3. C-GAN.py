@@ -38,17 +38,22 @@ if not os.path.exists(OUT_DIR):
 
 
 # hyper-parameters and constants
-epochs = 2
+# for good results: epoch = 500, batch = 100
+epochs = 10
 batch_size = 100
 noise = 100
 num_class = 6
 num_data = 1000
-
-TRAIN_GAN = True
-TRAIN_ENCODER = True
-TRAIN_GAN_WITH_FR = True
+DB_NAME = 'ch3-1000.mat'
 image_shape = (64, 64, 3)
 fr_image_shape = (192, 192, 3)
+
+
+# program control option 1: on-off-off
+# program control option 2: on-on-off then off-off-on
+TRAIN_GAN = False
+TRAIN_ENCODER = False
+TRAIN_GAN_WITH_FR = True
 
 
 # encoder network
@@ -209,59 +214,6 @@ def build_discriminator():
     return model
 
 
-# build face recognition model
-# we use pre-trained resnet v2
-def build_fr_model(input_shape):
-    resent_model = InceptionResNetV2(include_top = False, weights = 'imagenet', 
-        input_shape = input_shape, pooling = 'avg')
-    image_input = resent_model.input
-    x = resent_model.layers[-1].output
-    out = Dense(128)(x)
-
-    embedder_model = Model(inputs = [image_input], outputs = [out])
-
-    input_layer = Input(shape = input_shape)
-
-    x = embedder_model(input_layer)
-    output = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
-
-    model = Model(inputs=[input_layer], outputs=[output])
-    return model
-
-
-# combine encoder and generator to build the optimized GAN
-def build_fr_combined_network(encoder, generator, fr_model):
-    input_image = Input(shape = image_shape)
-    input_label = Input(shape = (num_class,))
-
-    latent0 = encoder(input_image)
-
-    gen_images = generator([latent0, input_label])
-
-    fr_model.trainable = False
-
-    resized_images = Lambda(lambda x: K.resize_images(gen_images, 
-        height_factor = 2, width_factor = 2, 
-        data_format = 'channels_last'))(gen_images)
-    embeddings = fr_model(resized_images)
-
-    model = Model(inputs = [input_image, input_label], outputs = [embeddings])
-    return model
-
-
-
-def build_image_resizer():
-    input_layer = Input(shape=(64, 64, 3))
-
-    resized_images = Lambda(lambda x: K.resize_images(x, 
-        height_factor = 3, width_factor = 3, 
-        data_format = 'channels_last'))(input_layer)
-
-    model = Model(input = [input_layer], outputs = [resized_images])
-    return model
-
-
-
 # taken: year the photo was taken
 # dob: date of birth in ordinal format
 # birth: birthday in yyyy-mm-dd format
@@ -281,7 +233,7 @@ def load_data():
     # Load the wiki.mat file
     # meta contains 4 dimesional dictionary
     dataset = 'wiki'
-    meta = loadmat(os.path.join(DB_DIR, "chap3.mat"))
+    meta = loadmat(os.path.join(DB_DIR, DB_NAME))
     full_path = meta[dataset][0, 0]["full_path"][0]
     print('\nWe use', len(full_path), 'images.')
 
@@ -420,7 +372,7 @@ age_cat = age_to_category(ages)
 # reshaping 1000 category data to (1000, 1)
 final_age_cat = np.reshape(np.array(age_cat), [num_data, 1])
 
-# one-hot encode category data
+# one-hot encoded category data
 cats = to_categorical(final_age_cat, num_class)
 
 # load image data
@@ -575,30 +527,72 @@ if TRAIN_ENCODER:
     encoder.save_weights("ch3-output/encoder.h5")
 
 
+##################################
+# OPTIMIZE ENCODER AND GENERATOR #
+##################################
 
-"""
-Optimize the encoder and the generator network
-"""
+# increase the size of image by 3x
+def build_image_resizer():
+    input_layer = Input(shape = (64, 64, 3))
+
+    resized_images = Lambda(lambda x: K.resize_images(x, 
+        height_factor = 3, width_factor = 3, 
+        data_format = 'channels_last'))(input_layer)
+
+    model = Model(input = [input_layer], outputs = [resized_images])
+
+    print('\n=== IMAGE RESIZER summary')
+    model.summary()
+
+    return model
+
+
+# build face recognition model
+# we use pre-trained resnet v2
+# input: 192 x 192 x 3 image
+# output: 128 values
+def build_fr_model(input_shape):
+    resnet_model = InceptionResNetV2(include_top = False, weights = 'imagenet', 
+        input_shape = input_shape, pooling = 'avg')
+    image_input = resnet_model.input
+    x = resnet_model.layers[-1].output
+    out = Dense(128)(x)
+
+    embedder_model = Model(inputs = [image_input], outputs = [out])
+
+    input_layer = Input(shape = input_shape)
+
+    x = embedder_model(input_layer)
+    output = Lambda(lambda x: K.l2_normalize(x, axis = -1))(x)
+
+    model = Model(inputs=[input_layer], outputs=[output])
+    print('\n=== Face recognizer summary')
+    model.summary()
+    exit()
+
+    return model
+
+
 if TRAIN_GAN_WITH_FR:
 
-    # Load the encoder network
+    # load the encoder network
     encoder = build_encoder()
     encoder.load_weights("ch3-output/encoder.h5")
 
-    # Load the generator network
+    # load the generator network
     generator.load_weights("ch3-output/generator.h5")
 
     image_resizer = build_image_resizer()
-    image_resizer.compile(loss=['binary_crossentropy'], optimizer='adam')
+    image_resizer.compile(loss = ['binary_crossentropy'], optimizer = 'adam')
 
-    # Face recognition model
-    fr_model = build_fr_model(input_shape=fr_image_shape)
-    fr_model.compile(loss=['binary_crossentropy'], optimizer="adam")
+    # face recognition model
+    fr_model = build_fr_model(input_shape = fr_image_shape)
+    fr_model.compile(loss = ['binary_crossentropy'], optimizer = "adam")
 
-    # Make the face recognition network as non-trainable
+    # make the face recognition network as non-trainable
     fr_model.trainable = False
 
-    # Input layers
+    # input layers
     input_image = Input(shape=(64, 64, 3))
     input_label = Input(shape=(6,))
 
@@ -631,7 +625,7 @@ if TRAIN_GAN_WITH_FR:
             img_batch = img_batch / 127.5 - 1.0
             img_batch = img_batch.astype(np.float32)
 
-            y_batch = y[index * batch_size:(index + 1) * batch_size]
+            y_batch = cats[index * batch_size:(index + 1) * batch_size]
 
             img_batch_resized = image_resizer.predict_on_batch(img_batch)
 
@@ -647,13 +641,13 @@ if TRAIN_GAN_WITH_FR:
         img_batch = img_batch / 127.5 - 1.0
         img_batch = img_batch.astype(np.float32)
 
-        y_batch = y[0:batch_size]
+        y_batch = cats[0:batch_size]
         z_noise = np.random.normal(0, 1, size=(batch_size, noise))
 
         gen_images = generator.predict_on_batch([z_noise, y_batch])
 
         for i, img in enumerate(gen_images[:5]):
-            save_rgb_img(img, path="chap3-output/img_opt_{}_{}.png".format(epoch, i))
+            save_rgb_img(img, path="ch3-output/img_opt_{}_{}.png".format(epoch, i))
 
     # Save improved weights for both of the networks
     generator.save_weights("ch3-output/generator_optimized.h5")
