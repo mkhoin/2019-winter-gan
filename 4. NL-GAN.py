@@ -38,7 +38,7 @@ from keras.layers.core import Reshape
 
 N_CRITIC_ITERS = 5  # The training ratio is the number of discriminator updates per generator update. The paper uses 5.
 GRADIENT_PENALTY_WEIGHT = 10  # As per the paper
-GLOB_STR = "dataset/words/training/*"
+GLOB_STR = "dataset/words/*"
 BATCH_SIZE = 0
 
 def build_resnet_generator(input_shape, n_filters, n_residual_blocks,
