@@ -147,6 +147,7 @@ def sample(generator_output, id_to_token, join_char=' '):
     sentences = []
     for item in ids_per_batch:
         sentences.append(join_char.join([id_to_token[id] for id in item[0]]))
+
     return sentences
 
 
@@ -158,8 +159,9 @@ def get_data(glob_str, vocabulary_size=96, sos="<s>", eos="</s>", unk_token='|',
     data = None
     i = 0
     for filepath in glob(glob_str):
-        with open(filepath, encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8", newline='') as f:
             cur_data = f.readlines()
+
             if symbol_based:
                 cur_data = [list(sos) + list(d.strip().lower()) + list(eos)
                             for d in cur_data]
@@ -167,9 +169,7 @@ def get_data(glob_str, vocabulary_size=96, sos="<s>", eos="</s>", unk_token='|',
                 cur_data = [[sos] + d.strip().split() + [eos]
                             for d in cur_data]
             data = cur_data if data is None else data + cur_data
-            if len(data) > 500000:
-                print("number of sentences: ", len(data))
-                break
+    print("number of sentences: ", len(data))
 
     token_frequency = Counter(np.hstack(data))
     token_frequency = pd.DataFrame.from_dict(
@@ -268,13 +268,13 @@ def log_losses(loss_d, loss_g, iteration, logger):
 
 def train(ndf=512, ngf=512, z_dim=128, n_residual_blocks_discriminator=5,
           n_residual_blocks_generator=5, lr_d=1e-4, lr_g=1e-4,
-          batch_size=64, iters_per_checkpoint=2000,
-          n_checkpoint_text=36, vocabulary_size=2048, max_sentence_length=32,
+          batch_size=100, iters_per_checkpoint=1,
+          n_checkpoint_text=1, vocabulary_size=2048, max_sentence_length=5,
           sos='<s>', eos='</s>', unk_token='<unk>', symbol_based=False,
           word_join=' '):
     global BATCH_SIZE
 
-    n_iterations = 10    
+    n_iterations = 1000    
     out_dir='ch4-output'
 
     BATCH_SIZE = batch_size
@@ -364,8 +364,11 @@ def train(ndf=512, ngf=512, z_dim=128, n_residual_blocks_discriminator=5,
         if (i % iters_per_checkpoint) == 0:
             G.trainable = False
             fake_text = G.predict(z_fixed)
-            log_text(sample(fake_text, id_to_token, word_join), 'fake', i,
-                     logger)
+
+            tmp = sample(fake_text, id_to_token, word_join)
+            print(tmp)
+
+            log_text(tmp, 'fake', i, logger)
 
         log_losses(losses_d, loss_g, i, logger)
 
