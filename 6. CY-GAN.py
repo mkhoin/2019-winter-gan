@@ -1,118 +1,138 @@
-import time
-from glob import glob
+# Turning Paintings into Photos using Cycle-GAN
+# January 8, 2020
+# Sung Kyu Lim
+# Georgia Institute of Technology
+# limsk@ece.gatech.edu
 
+
+# import packages
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+import os
+
+from glob import glob
 from keras import Input, Model
 from keras.callbacks import TensorBoard
-from keras.layers import Conv2D, BatchNormalization, Activation, Add, Conv2DTranspose, \
-    ZeroPadding2D, LeakyReLU
+from keras.layers import Conv2D, BatchNormalization, Activation
+from keras.layers import Add, Conv2DTranspose, ZeroPadding2D, LeakyReLU
 from keras.optimizers import Adam
 from keras_contrib.layers.normalization.instancenormalization import InstanceNormalization
 from imageio import imread
 from skimage.transform import resize
 
 
+# hyper-parameters and constants
+batch_size = 2
+epochs = 1
+data_dir = "./dataset/monet2photo/"
+input_shape = (128, 128, 3)
+residual_blocks = 6
+hidden_layers = 3
+my_opt = Adam(0.002, 0.5)
+
+
+# execution mode: train or test
+mode = 'train'
+
+
+# create directories
+OUT_DIR = "./ch6-output/"
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
+
+
+# residual block used in the two generators
 def residual_block(x):
-    """
-    Residual block
-    """
-    res = Conv2D(filters=128, kernel_size=3, strides=1, padding="same")(x)
-    res = BatchNormalization(axis=3, momentum=0.9, epsilon=1e-5)(res)
+    res = Conv2D(128, kernel_size = 3, strides = 1, padding = "same")(x)
+    res = BatchNormalization(axis=3, momentum=0.9, epsilon = 1e-5)(res)
     res = Activation('relu')(res)
 
-    res = Conv2D(filters=128, kernel_size=3, strides=1, padding="same")(res)
-    res = BatchNormalization(axis=3, momentum=0.9, epsilon=1e-5)(res)
+    res = Conv2D(128, kernel_size = 3, strides = 1, padding = "same")(res)
+    res = BatchNormalization(axis=3, momentum = 0.9, epsilon = 1e-5)(res)
 
     return Add()([res, x])
 
 
+# generator definition
+# it has an auto-encoder shape
 def build_generator():
-    """
-    Create a generator network using the hyperparameter values defined below
-    """
-    input_shape = (128, 128, 3)
-    residual_blocks = 6
-    input_layer = Input(shape=input_shape)
+    input_layer = Input(shape = input_shape)
 
-    # First Convolution block
-    x = Conv2D(filters=32, kernel_size=7, strides=1, padding="same")(input_layer)
-    x = InstanceNormalization(axis=1)(x)
+    # 1st convolution block
+    x = Conv2D(32, kernel_size = 7, strides = 1, padding = "same")(input_layer)
+    x = InstanceNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
-    # 2nd Convolution block
-    x = Conv2D(filters=64, kernel_size=3, strides=2, padding="same")(x)
-    x = InstanceNormalization(axis=1)(x)
+    # 2nd convolution block
+    x = Conv2D(64, kernel_size = 3, strides = 2, padding = "same")(x)
+    x = InstanceNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
-    # 3rd Convolution block
-    x = Conv2D(filters=128, kernel_size=3, strides=2, padding="same")(x)
-    x = InstanceNormalization(axis=1)(x)
+    # 3rd convolution block
+    x = Conv2D(128, kernel_size = 3, strides = 2, padding = "same")(x)
+    x = InstanceNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
-    # Residual blocks
+    # residual blocks
     for _ in range(residual_blocks):
         x = residual_block(x)
 
-    # Upsampling blocks
-
-    # 1st Upsampling block
-    x = Conv2DTranspose(filters=64, kernel_size=3, strides=2, padding='same', use_bias=False)(x)
-    x = InstanceNormalization(axis=1)(x)
+    # 1st upsampling block
+    x = Conv2DTranspose(64, kernel_size = 3, strides = 2, padding='same', use_bias = False)(x)
+    x = InstanceNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
-    # 2nd Upsampling block
-    x = Conv2DTranspose(filters=32, kernel_size=3, strides=2, padding='same', use_bias=False)(x)
-    x = InstanceNormalization(axis=1)(x)
+    # 2nd upsampling block
+    x = Conv2DTranspose(32, kernel_size = 3, strides = 2, padding='same', use_bias = False)(x)
+    x = InstanceNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
-    # Last Convolution layer
-    x = Conv2D(filters=3, kernel_size=7, strides=1, padding="same")(x)
+    # final convolution layer
+    x = Conv2D(3, kernel_size = 7, strides = 1, padding = "same")(x)
     output = Activation('tanh')(x)
 
-    model = Model(inputs=[input_layer], outputs=[output])
+    model = Model(inputs = [input_layer], outputs = [output])
     return model
 
 
+# discriminator definition
+# it consists of convolution blocks
 def build_discriminator():
-    """
-    Create a discriminator network using the hyperparameter values defined below
-    """
-    input_shape = (128, 128, 3)
-    hidden_layers = 3
+    input_layer = Input(shape = input_shape)
+    x = ZeroPadding2D(padding = (1, 1))(input_layer)
 
-    input_layer = Input(shape=input_shape)
+    # 1st convolutional block
+    x = Conv2D(64, kernel_size = 4, strides = 2, padding = "valid")(x)
+    x = LeakyReLU(alpha = 0.2)(x)
+    x = ZeroPadding2D(padding = (1, 1))(x)
 
-    x = ZeroPadding2D(padding=(1, 1))(input_layer)
-
-    # 1st Convolutional block
-    x = Conv2D(filters=64, kernel_size=4, strides=2, padding="valid")(x)
-    x = LeakyReLU(alpha=0.2)(x)
-
-    x = ZeroPadding2D(padding=(1, 1))(x)
-
-    # 3 Hidden Convolution blocks
+    # 3 hidden convolution blocks
     for i in range(1, hidden_layers + 1):
-        x = Conv2D(filters=2 ** i * 64, kernel_size=4, strides=2, padding="valid")(x)
-        x = InstanceNormalization(axis=1)(x)
-        x = LeakyReLU(alpha=0.2)(x)
+        x = Conv2D(2 ** i * 64, kernel_size = 4, strides = 2, padding = "valid")(x)
+        x = InstanceNormalization(axis = 1)(x)
+        x = LeakyReLU(alpha = 0.2)(x)
+        x = ZeroPadding2D(padding = (1, 1))(x)
 
-        x = ZeroPadding2D(padding=(1, 1))(x)
+    # final convolution layer
+    output = Conv2D(1, kernel_size = 4, strides = 1, activation = "sigmoid")(x)
 
-    # Last Convolution layer
-    output = Conv2D(filters=1, kernel_size=4, strides=1, activation="sigmoid")(x)
-
-    model = Model(inputs=[input_layer], outputs=[output])
+    model = Model(inputs = [input_layer], outputs = [output])
     return model
 
 
-def load_images(data_dir):
-    imagesA = glob(data_dir + '/testA/*.*')
-    imagesB = glob(data_dir + '/testB/*.*')
+# loading image files using glob package
+def load_images():
+    imagesA = glob(data_dir + 'testA/*.*')
+    imagesB = glob(data_dir + 'testB/*.*')
 
     allImagesA = []
     allImagesB = []
+
+    print('\nImages in the dataset:')
+    print('   Test A (paintings):', len(imagesA))
+    print('   Test B (photos):', len(imagesB))
 
     for index, filename in enumerate(imagesA):
         imgA = imread(filename, pilmode='RGB')
@@ -132,12 +152,17 @@ def load_images(data_dir):
     allImagesA = np.array(allImagesA) / 127.5 - 1.
     allImagesB = np.array(allImagesB) / 127.5 - 1.
 
+    print('   Paintings used:', len(allImagesA))
+    print('   Photos used:', len(allImagesB))
+
     return allImagesA, allImagesB
 
 
-def load_test_batch(data_dir, batch_size):
-    imagesA = glob(data_dir + '/testA/*.*')
-    imagesB = glob(data_dir + '/testB/*.*')
+# pick the next batch of random images
+# to test GAN and save the resulting images
+def load_test_batch():
+    imagesA = glob(data_dir + 'testA/*.*')
+    imagesB = glob(data_dir + 'testB/*.*')
 
     imagesA = np.random.choice(imagesA, batch_size)
     imagesB = np.random.choice(imagesB, batch_size)
@@ -146,227 +171,247 @@ def load_test_batch(data_dir, batch_size):
     allB = []
 
     for i in range(len(imagesA)):
-        # Load images and resize images
+        # load and resize images
         imgA = resize(imread(imagesA[i], pilmode='RGB').astype(np.float32), (128, 128))
         imgB = resize(imread(imagesB[i], pilmode='RGB').astype(np.float32), (128, 128))
 
         allA.append(imgA)
         allB.append(imgB)
 
+    # scaling the raw data
     return np.array(allA) / 127.5 - 1.0, np.array(allB) / 127.5 - 1.0
 
 
-def save_images(originalA, generatedB, recosntructedA, originalB, generatedA, reconstructedB, path):
-    """
-    Save images
-    """
+# show 3 images per sample: original, generated, and reconstructed
+# the first set is paintings, the secone set photos
+# this code works for batch = 2
+def save_images(oriA, genB, reconA, oriB, genA, reconB, path):
     fig = plt.figure()
-    ax = fig.add_subplot(2, 3, 1)
-    ax.imshow(originalA)
+    ax = fig.add_subplot(batch_size, 3, 1)
+    ax.imshow(oriA)
     ax.axis("off")
     ax.set_title("Original")
 
-    ax = fig.add_subplot(2, 3, 2)
-    ax.imshow(generatedB)
+    ax = fig.add_subplot(batch_size, 3, 2)
+    ax.imshow(genB)
     ax.axis("off")
     ax.set_title("Generated")
 
-    ax = fig.add_subplot(2, 3, 3)
-    ax.imshow(recosntructedA)
+    ax = fig.add_subplot(batch_size, 3, 3)
+    ax.imshow(reconA)
     ax.axis("off")
     ax.set_title("Reconstructed")
 
-    ax = fig.add_subplot(2, 3, 4)
-    ax.imshow(originalB)
+    ax = fig.add_subplot(batch_size, 3, 4)
+    ax.imshow(oriB)
     ax.axis("off")
     ax.set_title("Original")
 
-    ax = fig.add_subplot(2, 3, 5)
-    ax.imshow(generatedA)
+    ax = fig.add_subplot(batch_size, 3, 5)
+    ax.imshow(genA)
     ax.axis("off")
     ax.set_title("Generated")
 
-    ax = fig.add_subplot(2, 3, 6)
-    ax.imshow(reconstructedB)
+    ax = fig.add_subplot(batch_size, 3, 6)
+    ax.imshow(reconB)
     ax.axis("off")
     ax.set_title("Reconstructed")
 
     plt.savefig(path)
 
 
-def write_log(callback, name, loss, batch_no):
-    """
-    Write training summary to TensorBoard
-    """
-    summary = tf.Summary()
-    summary_value = summary.value.add()
-    summary_value.simple_value = loss
-    summary_value.tag = name
-    callback.writer.add_summary(summary, batch_no)
-    callback.writer.flush()
+# build two discriminators
+# A is painting, B is photo
+# note that discriminators need compilation
+def build_discriminators():
+
+    # discriminator A summary
+    # input: 128 x 128 x 3 image
+    # output: 7 x 7 x 1 values
+    discriminatorA = build_discriminator()    
+    print('\n=== Discriminator A summary')
+    discriminatorA.summary()
+
+    # discriminator B summary
+    # input: 128 x 128 x 3 image
+    # output: 7 x 7 x 1 values
+    discriminatorB = build_discriminator()    
+    print('\n=== Discriminator B summary')
+    discriminatorB.summary()
+
+    discriminatorA.compile(loss = 'mse', optimizer = my_opt, metrics = ['accuracy'])
+    discriminatorB.compile(loss = 'mse', optimizer = my_opt, metrics = ['accuracy'])    
+    
+    return discriminatorA, discriminatorB
 
 
-if __name__ == '__main__':
-    data_dir = "data/monet2photo/"
-    batch_size = 1
-    epochs = 200
-    mode = 'train'
+# build two generators
+# A is painting, B is photo
+# note that generators do not need compilation
+def build_generators():
 
-    if mode == 'train':
-        """
-        Load dataset
-        """
-        imagesA, imagesB = load_images(data_dir=data_dir)
+    # generator A to B 
+    # input: 128 x 128 x 3 image
+    # output: 128 x 128 x 3 image
+    generatorAtoB = build_generator()    
+    print('\n=== Generator A to B summary')
+    generatorAtoB.summary()
 
-        # Define the common optimizer
-        common_optimizer = Adam(0.002, 0.5)
+    # generator B to A 
+    # input: 128 x 128 x 3 image
+    # output: 128 x 128 x 3 image
+    generatorBtoA = build_generator()
+    print('\n=== Generator B to A summary')
+    generatorBtoA.summary()
 
-        # Build and compile generator networks
-        discriminatorA = build_discriminator()
-        discriminatorB = build_discriminator()
+    return generatorAtoB, generatorBtoA
 
-        discriminatorA.compile(loss='mse', optimizer=common_optimizer, metrics=['accuracy'])
-        discriminatorB.compile(loss='mse', optimizer=common_optimizer, metrics=['accuracy'])
 
-        # Build generator networks
-        generatorAToB = build_generator()
-        generatorBToA = build_generator()
+# build cycle-GAN
+# A is painting, B is photo
+# note that CGAN needs compilation
+# input: two images (one painting, one photo)
+# output: two generated images, two real/fake answers 
+# additional output: error-related for back-propagation
+def build_GAN(discriminatorA, discriminatorB, generatorAtoB, generatorBtoA):
 
-        """
-        Create an adversarial network
-        """
-        inputA = Input(shape=(128, 128, 3))
-        inputB = Input(shape=(128, 128, 3))
+    # input layers
+    inputA = Input(shape = input_shape)
+    inputB = Input(shape = input_shape)
 
-        # Generated images using both of the generator networks
-        generatedB = generatorAToB(inputA)
-        generatedA = generatorBToA(inputB)
+    # generate images using both generators
+    genB = generatorAtoB(inputA)
+    genA = generatorBtoA(inputB)
 
-        # Reconstruct images back to original images
-        reconstructedA = generatorBToA(generatedB)
-        reconstructedB = generatorAToB(generatedA)
+    # reconstruct images back to original 
+    reconA = generatorBtoA(genB)
+    reconB = generatorAtoB(genA)
 
-        generatedAId = generatorBToA(inputA)
-        generatedBId = generatorAToB(inputB)
+    # additional outputs
+    genA_ID = generatorBtoA(inputA)
+    genB_ID = generatorAtoB(inputB)
+    probs_A = discriminatorA(genA)
+    probs_B = discriminatorB(genB)
 
-        # Make both of the discriminator networks non-trainable
-        discriminatorA.trainable = False
-        discriminatorB.trainable = False
+    # make both discriminators non-trainable
+    discriminatorA.trainable = False
+    discriminatorB.trainable = False
 
-        probsA = discriminatorA(generatedA)
-        probsB = discriminatorB(generatedB)
+    # build and compile cycle-GAN
+    CGAN = Model(inputs = [inputA, inputB], 
+        outputs = [probs_A, probs_B, reconA, reconB, genA_ID, genB_ID])
 
-        adversarial_model = Model(inputs=[inputA, inputB],
-                                  outputs=[probsA, probsB, reconstructedA, reconstructedB,
-                                           generatedAId, generatedBId])
-        adversarial_model.compile(loss=['mse', 'mse', 'mae', 'mae', 'mae', 'mae'],
-                                  loss_weights=[1, 1, 10.0, 10.0, 1.0, 1.0],
-                                  optimizer=common_optimizer)
+    CGAN.compile(loss = ['mse', 'mse', 'mae', 'mae', 'mae', 'mae'],
+        loss_weights = [1, 1, 10.0, 10.0, 1.0, 1.0],
+        optimizer = my_opt)
 
-        tensorboard = TensorBoard(log_dir="logs/{}".format(time.time()), write_images=True, write_grads=True,
-                                  write_graph=True)
-        tensorboard.set_model(generatorAToB)
-        tensorboard.set_model(generatorBToA)
-        tensorboard.set_model(discriminatorA)
-        tensorboard.set_model(discriminatorB)
+    print('\n=== Cycle-GAN summary')
+    CGAN.summary()
 
-        real_labels = np.ones((batch_size, 7, 7, 1))
-        fake_labels = np.zeros((batch_size, 7, 7, 1))
+    return CGAN   
 
-        for epoch in range(epochs):
-            print("Epoch:{}".format(epoch))
 
-            dis_losses = []
-            gen_losses = []
+# test CGAN on two sample images
+def test_CGAN(epoch):
+    # Get two sample sets
+    batchA, batchB = load_test_batch()
 
-            num_batches = int(min(imagesA.shape[0], imagesB.shape[0]) / batch_size)
-            print("Number of batches:{}".format(num_batches))
+    # Generate images
+    genB = generatorAtoB.predict(batchA)
+    genA = generatorBtoA.predict(batchB)
 
-            for index in range(num_batches):
-                print("Batch:{}".format(index))
+    # Get reconstructed images
+    reconA = generatorBtoA.predict(genB)
+    reconB = generatorAtoB.predict(genA)
 
-                # Sample images
-                batchA = imagesA[index * batch_size:(index + 1) * batch_size]
-                batchB = imagesB[index * batch_size:(index + 1) * batch_size]
+    for i in range(batch_size):
+        save_images(batchA[i], genB[i], reconA[i], batchB[i], genA[i], reconB[i],
+            path = "ch6-output/gen_{}_{}".format(epoch, i))
 
-                # Translate images to opposite domain
-                generatedB = generatorAToB.predict(batchA)
-                generatedA = generatorBToA.predict(batchB)
 
-                # Train the discriminator A on real and fake images
-                dALoss1 = discriminatorA.train_on_batch(batchA, real_labels)
-                dALoss2 = discriminatorA.train_on_batch(generatedA, fake_labels)
+# train cycle-GAN
+if mode == 'train':
+    print('\n\n\nCGAN training starts!')
+    # load the dataset
+    imagesA, imagesB = load_images()
 
-                # Train the discriminator B on ral and fake images
-                dBLoss1 = discriminatorB.train_on_batch(batchB, real_labels)
-                dbLoss2 = discriminatorB.train_on_batch(generatedB, fake_labels)
+    # build the necessary networks
+    discriminatorA, discriminatorB = build_discriminators()
+    generatorAtoB, generatorBtoA = build_generators()
+    CGAN = build_GAN(discriminatorA, discriminatorB, generatorAtoB, generatorBtoA)
 
-                # Calculate the total discriminator loss
-                d_loss = 0.5 * np.add(0.5 * np.add(dALoss1, dALoss2), 0.5 * np.add(dBLoss1, dbLoss2))
+    # real and fake labels for discriminators
+    real_labels = np.ones((batch_size, 7, 7, 1))
+    fake_labels = np.zeros((batch_size, 7, 7, 1))
 
-                print("d_loss:{}".format(d_loss))
+    # epoch training starts
+    for epoch in range(epochs):
+        print("Epoch:{}".format(epoch))
 
-                """
-                Train the generator networks
-                """
-                g_loss = adversarial_model.train_on_batch([batchA, batchB],
-                                                          [real_labels, real_labels, batchA, batchB, batchA, batchB])
+        num_batches = int(min(imagesA.shape[0], imagesB.shape[0]) / batch_size)
+        print("   Number of batches: {}".format(num_batches))
 
-                print("g_loss:{}".format(g_loss))
+        for index in range(num_batches):
+            print("      Batch {}".format(index))
 
-                dis_losses.append(d_loss)
-                gen_losses.append(g_loss)
+            # obtain the next batch of images
+            batchA = imagesA[index * batch_size:(index + 1) * batch_size]
+            batchB = imagesB[index * batch_size:(index + 1) * batch_size]
 
-            """
-            Save losses to Tensorboard after each epoch
-            """
-            write_log(tensorboard, 'discriminator_loss', np.mean(dis_losses), epoch)
-            write_log(tensorboard, 'generator_loss', np.mean(gen_losses), epoch)
+            # mpa images to opposite domain
+            genB = generatorAtoB.predict(batchA)
+            genA = generatorBtoA.predict(batchB)
 
-            # Sample and save images after every 10 epochs
-            if epoch % 10 == 0:
-                # Get a batch of test data
-                batchA, batchB = load_test_batch(data_dir=data_dir, batch_size=2)
+            # train discriminator A on real and fake images
+            dA_loss_r = discriminatorA.train_on_batch(batchA, real_labels)
+            dA_loss_f = discriminatorA.train_on_batch(genA, fake_labels)
 
-                # Generate images
-                generatedB = generatorAToB.predict(batchA)
-                generatedA = generatorBToA.predict(batchB)
+            # train discriminator B on ral and fake images
+            dB_loss_r = discriminatorB.train_on_batch(batchB, real_labels)
+            dB_loss_f = discriminatorB.train_on_batch(genB, fake_labels)
 
-                # Get reconstructed images
-                reconsA = generatorBToA.predict(generatedB)
-                reconsB = generatorAToB.predict(generatedA)
+            # calculate the total discriminator loss
+            d_loss = 0.5 * np.add(0.5 * np.add(dA_loss_r, dA_loss_f), 
+                0.5 * np.add(dB_loss_r, dB_loss_f))
 
-                # Save original, generated and reconstructed images
-                for i in range(len(generatedA)):
-                    save_images(originalA=batchA[i], generatedB=generatedB[i], recosntructedA=reconsA[i],
-                                originalB=batchB[i], generatedA=generatedA[i], reconstructedB=reconsB[i],
-                                path="results/gen_{}_{}".format(epoch, i))
+            print("         d_loss:{}".format(d_loss))
 
-        # Save models
-        generatorAToB.save_weights("generatorAToB.h5")
-        generatorBToA.save_weights("generatorBToA.h5")
-        discriminatorA.save_weights("discriminatorA.h5")
-        discriminatorB.save_weights("discriminatorB.h5")
+            # train generators and calculate loss
+            g_loss = CGAN.train_on_batch([batchA, batchB],
+                [real_labels, real_labels, batchA, batchB, batchA, batchB])
 
-    elif mode == 'predict':
-        # Build generator networks
-        generatorAToB = build_generator()
-        generatorBToA = build_generator()
+            print("         g_loss:{}".format(g_loss))
 
-        generatorAToB.load_weights("generatorAToB.h5")
-        generatorBToA.load_weights("generatorBToA.h5")
+        test_CGAN(epoch)
 
-        # Get a batch of test data
-        batchA, batchB = load_test_batch(data_dir=data_dir, batch_size=2)
 
-        # Save images
-        generatedB = generatorAToB.predict(batchA)
-        generatedA = generatorBToA.predict(batchB)
+    # save models for prediction 
+    generatorAtoB.save_weights("generatorAToB.h5")
+    generatorBtoA.save_weights("generatorBToA.h5")
 
-        reconsA = generatorBToA.predict(generatedB)
-        reconsB = generatorAToB.predict(generatedA)
 
-        for i in range(len(generatedA)):
-            save_images(originalA=batchA[i], generatedB=generatedB[i], recosntructedA=reconsA[i],
-                        originalB=batchB[i], generatedA=generatedA[i], reconstructedB=reconsB[i],
-                        path="results/test_{}".format(i))
+# use cycle-GAN for prediction
+if mode == 'test':
+    print('\n\n\nCGAN prediction starts!')
+
+    # build generator networks
+    generatorAtoB = build_generator()
+    generatorBtoA = build_generator()
+
+    generatorAtoB.load_weights("generatorAtoB.h5")
+    generatorBtoA.load_weights("generatorBtoA.h5")
+
+    # get a batch of test data
+    batchA, batchB = load_test_batch()
+
+    # generate fake images
+    genB = generatorAtoB.predict(batchA)
+    genA = generatorBtoA.predict(batchB)
+
+    reconA = generatorBtoA.predict(genB)
+    reconB = generatorAtoB.predict(genA)
+
+    # save images
+    for i in range(len(genA)):
+        save_images(batchA[i], genB[i], reconA[i], batchB[i], genA[i], reconB[i],
+            path="ch6-output/test_{}".format(i))
