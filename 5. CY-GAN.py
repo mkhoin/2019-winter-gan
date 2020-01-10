@@ -17,7 +17,8 @@ from glob import glob
 from keras import Input, Model
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, BatchNormalization, Activation
-from keras.layers import Add, Conv2DTranspose, ZeroPadding2D, LeakyReLU
+from keras.layers import Add, Conv2DTranspose
+from keras.layers ZeroPadding2D, LeakyReLU
 from keras.optimizers import Adam
 from imageio import imread
 from skimage.transform import resize
@@ -135,12 +136,15 @@ def load_images():
     print('   Test B (photos):', len(imagesB))
 
     for index, filename in enumerate(imagesA):
-        imgA = imread(filename, pilmode='RGB')
-        imgB = imread(imagesB[index], pilmode='RGB')
+        imgA = imread(filename, pilmode = 'RGB')
+        imgB = imread(imagesB[index], pilmode = 'RGB')
 
+        # reduce image resolution 
+        # from 256 x 256 to 128 x 128
         imgA = resize(imgA, (128, 128))
         imgB = resize(imgB, (128, 128))
 
+        # we flip some images randomly
         if np.random.random() > 0.5:
             imgA = np.fliplr(imgA)
             imgB = np.fliplr(imgB)
@@ -148,7 +152,7 @@ def load_images():
         allImagesA.append(imgA)
         allImagesB.append(imgB)
 
-    # Normalize images
+    # normalize images to [-1, 1]
     allImagesA = np.array(allImagesA) / 127.5 - 1.
     allImagesB = np.array(allImagesB) / 127.5 - 1.
 
@@ -263,8 +267,8 @@ def load_test_batch():
 
     for i in range(len(imagesA)):
         # load and resize images
-        imgA = resize(imread(imagesA[i], pilmode='RGB').astype(np.float32), (128, 128))
-        imgB = resize(imread(imagesB[i], pilmode='RGB').astype(np.float32), (128, 128))
+        imgA = resize(imread(imagesA[i], pilmode = 'RGB').astype(np.float32), (128, 128))
+        imgB = resize(imread(imagesB[i], pilmode = 'RGB').astype(np.float32), (128, 128))
 
         allA.append(imgA)
         allB.append(imgB)
@@ -274,34 +278,41 @@ def load_test_batch():
 
 
 # show 3 images per sample: original, generated, and reconstructed
-# the first set is paintings, the secone set photos
+# the first set is paintings, the second set photos
 def save_images(oriA, genB, reconA, oriB, genA, reconB, path):
+
+    # original painting A
     fig = plt.figure()
     ax = fig.add_subplot(2, 3, 1)
     ax.imshow((oriA * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Original")
 
+    # painting A converted to photo B
     ax = fig.add_subplot(2, 3, 2)
     ax.imshow((genB * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Generated")
 
+    # photo B converted back to painting A
     ax = fig.add_subplot(2, 3, 3)
     ax.imshow((reconA * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Reconstructed")
 
+    # original painting B
     ax = fig.add_subplot(2, 3, 4)
     ax.imshow((oriB * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Original")
 
+    # painting B converted to photo A
     ax = fig.add_subplot(2, 3, 5)
     ax.imshow((genA * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Generated")
 
+    # photo A converted back to painting B
     ax = fig.add_subplot(2, 3, 6)
     ax.imshow((reconB * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
@@ -312,10 +323,10 @@ def save_images(oriA, genB, reconA, oriB, genA, reconB, path):
 
 # test CGAN on the first batch
 def test_CGAN(epoch, index):
-    # Get two sample sets
+    # get two sample sets
     batchA, batchB = load_test_batch()
 
-    # Generate images
+    # generate images
     genB = generatorAtoB.predict(batchA)
     genA = generatorBtoA.predict(batchB)
 
@@ -327,6 +338,10 @@ def test_CGAN(epoch, index):
     save_images(batchA[0], genB[0], reconA[0], batchB[0], genA[0], reconB[0],
         path = os.path.join(OUT_DIR, "gen_{}_{}".format(epoch + 1, index + 1)))
 
+
+##################
+# TRAINING PHASE #
+##################
 
 # train cycle-GAN
 if mode == 'train':
@@ -357,7 +372,7 @@ if mode == 'train':
             batchA = imagesA[index * batch_size:(index + 1) * batch_size]
             batchB = imagesB[index * batch_size:(index + 1) * batch_size]
 
-            # mpa images to opposite domain
+            # map images to opposite domain
             genB = generatorAtoB.predict(batchA)
             genA = generatorBtoA.predict(batchB)
 
@@ -388,6 +403,10 @@ if mode == 'train':
     generatorAtoB.save_weights(os.path.join(OUT_DIR, "generatorAToB.h5"))
     generatorBtoA.save_weights(os.path.join(OUT_DIR, "generatorBToA.h5"))
 
+
+#################
+# TESTING PHASE #
+#################
 
 # use cycle-GAN for prediction
 if mode == 'test':

@@ -70,14 +70,15 @@ def sample_images(batch_size):
 
     low_img = []
     high_img = []
+
     for img in images_batch:
-        # Get an ndarray of the current image
+        # get ndarray of the current image
         # image shape is (218, 178, 3)
         new_img = imread(img, pilmode = 'RGB')
         new_img = new_img.astype(np.float32)
 
 
-        # Resize the image from (218, 178, 3) to
+        # resize the image from (218, 178, 3) to
         # high_shape = (256, 256, 3)
         # low_shape = (64, 64, 3)
         new_img_high = resize(new_img, HIGH_SHAPE)
@@ -88,7 +89,7 @@ def sample_images(batch_size):
             new_img_high = np.fliplr(new_img_high)
             new_img_low = np.fliplr(new_img_low)
 
-
+        # add to the final list
         high_img.append(new_img_high)
         low_img.append(new_img_low)
 
@@ -105,7 +106,7 @@ def sample_images(batch_size):
 # it has 143 million pre-trained parameters
 def build_vgg():
 
-    # Load a pre-trained VGG19 model trained on 'Imagenet' dataset
+    # load pre-trained VGG19 model trained on 'Imagenet' dataset
     # need to decide which layer to use for the output
     input_shape = HIGH_SHAPE
     vgg = VGG19(weights = "imagenet")
@@ -136,7 +137,7 @@ def MY_CONV(channel, kernel, stride):
     return Conv2D(channel, kernel, strides = stride, padding = 'SAME')
 
 
-# Create a discriminator network using deep CNN
+# create a discriminator network using deep CNN
 # it has 5 million trainable parameters
 def build_discriminator():
 
@@ -222,7 +223,7 @@ def residual_block(x):
 # it has 2 million trainable parameters
 def build_generator():
     
-    # Input Layer of the generator network
+    # input Layer of the generator network
     input_shape = LOW_SHAPE    
     input_layer = Input(shape = input_shape)
 
@@ -230,7 +231,7 @@ def build_generator():
     gen1 = Conv2D(64, (9, 9), strides = 1, padding = 'same', 
             activation = 'relu')(input_layer)
 
-    # Add 15 residual blocks
+    # add 15 residual blocks
     res = residual_block(gen1)
     for i in range(MY_RESIDUAL):
         res = residual_block(res)
@@ -257,14 +258,14 @@ def build_generator():
     gen6 = MY_CONV(3, 9, 1)(gen5)
     output = Activation('tanh')(gen6)
 
-    # Keras model of our generator
+    # keras model of our generator
     model = Model(inputs = [input_layer], outputs = [output])
     model.summary()
 
     return model
 
 
-# create GASN network using all preview models including
+# create GAN network using all preview models including
 # VGG19, discriminator, and generator
 def build_GAN():
 
@@ -278,7 +279,7 @@ def build_GAN():
     discriminator = build_discriminator()
     discriminator.compile(loss = 'mse', optimizer = MY_OPT, metrics = ['acc'])
 
-    # Build the generator network
+    # build the generator network
     # compilation of generator is the same as that of GAN
     # shape change: (?, 64, 64, 3) -> (?, 256, 256, 3)
     generator = build_generator()
@@ -378,7 +379,7 @@ def train_D():
     d_loss_fake = discriminator.train_on_batch(fake_high, fake_labels)
 
 
-    # we take the average of the two above and report as the combined loss
+    # average of the two above and report as the combined loss
     d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
     print("  Discriminator loss:", d_loss[0])
 
@@ -395,13 +396,13 @@ def train_G():
     real_low = real_low / 127.5 - 1.
 
 
-    # Extract feature maps for real high-resolution images
+    # extract feature maps for real high-resolution images
     # VGG shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
     real_features = vgg.predict(real_high)
     real_labels = np.ones(DIS_ANS)
 
 
-    # Train the generator network
+    # train the generator network
     # we want generator to fake real images as much as possible
     # discriminator is not trained during this process
     # our GAN needs the following model parameters
@@ -486,7 +487,7 @@ def train_GAN(vgg, discriminator, generator, gan_model, TB):
     print('Generator:', g_loss[0])
 
 
-    # Save models
+    # save models
     generator.save_weights(os.path.join(OUT_DIR, "generator.h5"))
     discriminator.save_weights(os.path.join(OUT_DIR, "discriminator.h5"))
 

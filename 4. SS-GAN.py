@@ -22,21 +22,21 @@ from keras.optimizers import Adam
 from keras.utils import to_categorical
 
 
-# Input image dimensions
+# input image dimensions
 img_shape = (28, 28, 1)
 
 # size of the noise vector, used as input to the Generator
 noise = 100
 
-# Number of classes in the dataset
+# number of classes in the dataset
 num_classes = 10
 
-# Set hyperparameters
+# set hyperparameters
 epochs = 500
 batch_size = 100
 sample_interval = 10
 
-# Number of labeled examples to use (rest will be used as unlabeled)
+# number of labeled examples to use (rest will be used as unlabeled)
 num_labeled = 100
 
 
@@ -82,7 +82,7 @@ def build_generator(noise):
 
     model = Sequential()
 
-    # reshape noise input into 7x7x256 tensor via a fully connected layer
+    # reshape noise input into 7x7x256 tensor via dense layer
     model.add(Dense(256 * 7 * 7, input_dim = noise))
     model.add(Reshape((7, 7, 256)))
 
@@ -123,7 +123,7 @@ def build_disc_common(img_shape):
     # 1st convolutional block
     # dimension becomes 14 x 14 x 32
     model.add(Conv2D(32, kernel_size = 3, strides = 2,
-               input_shape = img_shape, padding = 'same'))
+        input_shape = img_shape, padding = 'same'))
     model.add(LeakyReLU(alpha = 0.01))
 
     # 2nd convolutional block
@@ -139,10 +139,10 @@ def build_disc_common(img_shape):
     model.add(LeakyReLU(alpha = 0.01))
     model.add(Dropout(0.5))
 
-    # Flatten the tensor
+    # flatten the tensor
     model.add(Flatten())
 
-    # Fully connected layer with num_classes neurons
+    # fully connected layer with num_classes neurons
     model.add(Dense(num_classes))
 
     # print the summary of discriminator
@@ -261,6 +261,7 @@ def train_disc():
     # unsupervised train on fake examples
     d_loss_fake = disc_unsuper.train_on_batch(gen_imgs, fake)
 
+    # computing loss by taking the average
     d_loss_unsuper = 0.5 * np.add(d_loss_real, d_loss_fake)
 
     return d_loss_super, d_loss_unsuper
@@ -288,19 +289,19 @@ def train():
 
         if (itr + 1) % sample_interval == 0:
 
-            # Output training progress
+            # output training progress
             print("%d [D loss super: %.4f], [D loss unsuper: %.4f], [G loss: %f]" 
                 % (itr + 1, d_loss_s, d_loss_u, g_loss))
-
-            # Output a sample of generated image
             sample_images(itr)                
 
 
+# select 16 sample images to test generator
+# and display/save the results
 def sample_images(itr):
 
     row = col = 4
 
-    # Sample random noise
+    # sample random noise
     z = np.random.normal(0, 1, (row * col, noise))
 
     # generate 16 fake images from random noise

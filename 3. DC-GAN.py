@@ -12,7 +12,8 @@ import numpy as np
 import os
 
 from keras.datasets import mnist
-from keras.layers import Activation, BatchNormalization, Dense, Dropout, Flatten, Reshape
+from keras.layers import Activation, BatchNormalization
+from keras.layers import Dense, Dropout, Flatten, Reshape
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.convolutional import Conv2D, Conv2DTranspose
 from keras.models import Sequential
@@ -24,8 +25,7 @@ epoch = 500
 batch_size = 128
 sample_interval = 10
 
-
-# Input image dimensions
+# input image dimensions
 img_shape = (28, 28, 1)
 
 # size of the noise vector, used as input to the generator
@@ -77,7 +77,7 @@ def build_generator():
     # 3rd transposed convolution layer, from 14 x 14 x 64 to 28 x 28 x 1 tensor
     model.add(Conv2DTranspose(1, kernel_size = 3, strides = 2, padding = 'same'))
 
-    # Output layer with tanh activation
+    # output layer with tanh activation
     model.add(Activation('tanh'))
 
     # print model summary
@@ -119,7 +119,7 @@ def build_discriminator():
     # leaky ReLU activation
     model.add(LeakyReLU(alpha = 0.01))
 
-    # Output layer with sigmoid activation
+    # output layer with sigmoid activation
     model.add(Flatten())
     model.add(Dense(1, activation = 'sigmoid'))
 
@@ -136,14 +136,14 @@ def build_gan(generator, discriminator):
 
     model = Sequential()
 
-    # combined Generator -> discriminator model
+    # combined generator -> discriminator model
     model.add(generator)
     model.add(discriminator)
 
     return model
 
 
-# test generator by showing 16 sample images
+# we test generator by showing 16 sample images
 def sample_images(itr):
     image_rows = 4
     image_cols = 4
@@ -154,7 +154,7 @@ def sample_images(itr):
     # generate images from random noise
     gen_imgs = generator.predict(z)
 
-    # Rescale image pixel values to [0, 1]
+    # rescale image pixel values to [0, 1]
     gen_imgs = 0.5 * gen_imgs + 0.5
 
     # set image grid
@@ -170,6 +170,7 @@ def sample_images(itr):
             axs[i, j].axis('off')
             cnt += 1
 
+    # save image files
     path = os.path.join(OUT_DIR, "img-{}".format(itr + 1))
     plt.savefig(path)
     plt.close()
@@ -185,7 +186,11 @@ def disc_train(X_train, real, fake):
     z = np.random.normal(0, 1, (batch_size, noise))
     gen_imgs = generator.predict(z)
 
-    # Train Discriminator
+    # train discriminator
+    # we train it once with real data and then with fake data
+    # note that generator weights are fixed
+    # discriminator weights are changing
+    # we take the average loss and accuracy between the two
     d_loss_real = discriminator.train_on_batch(imgs, real)
     d_loss_fake = discriminator.train_on_batch(gen_imgs, fake)
     d_loss, accuracy = 0.5 * np.add(d_loss_real, d_loss_fake)
@@ -195,11 +200,15 @@ def disc_train(X_train, real, fake):
 
 # train generator
 def gen_train(real):
-    # Generate a batch of fake images
+
+    # generate a batch of fake images
     z = np.random.normal(0, 1, (batch_size, noise))
     gen_imgs = generator.predict(z)
 
     # train generator
+    # we want discriminator to say this is real
+    # note that discriminator weights are fixed here
+    # but generator weights are changing
     g_loss = gan.train_on_batch(z, real)
 
     return g_loss
@@ -224,6 +233,7 @@ def GAN_train():
 
     print('\n\n\nStart GAN training!')
 
+    # start epochs
     for itr in range(epoch):
         d_loss, accuracy = disc_train(X_train, real, fake)
         g_loss = gen_train(real)
@@ -231,7 +241,7 @@ def GAN_train():
         # test generator and save training loss info
         if (itr + 1) % sample_interval == 0:
 
-            # save losses and accuracies to be plotted after training
+            # save losses and accuracies for plotting later
             losses.append((d_loss, g_loss))
             accuracies.append(100.0 * accuracy)
             checkpoints.append(itr + 1)
@@ -248,6 +258,7 @@ def GAN_train():
 def loss_plot(losses):
     losses = np.array(losses)
     plt.figure(figsize = (15, 5))
+
     plt.plot(checkpoints, losses.T[0], label = "Discriminator loss")
     plt.plot(checkpoints, losses.T[1], label = "Generator loss")
     plt.xticks(checkpoints, rotation = 90)
@@ -257,6 +268,7 @@ def loss_plot(losses):
     plt.ylabel("Loss")
     plt.legend()
 
+    # save the plots at the output directory
     path = os.path.join(OUT_DIR, 'loss-plot.png')
     plt.savefig(path)
     plt.close()
@@ -276,6 +288,7 @@ def acc_plot(accuracies):
     plt.ylabel("Accuracy (%)")
     plt.legend()
 
+    # save the plots at the output directory
     path = os.path.join(OUT_DIR, 'acc-plot.png')
     plt.savefig(path)
     plt.close()
@@ -297,11 +310,12 @@ generator = build_generator()
 # keep discriminator’s parameters constant for generator training
 discriminator.trainable = False
 
-# Build and compile GAN model with fixed discriminator to train generator
+# build and compile GAN model with fixed discriminator to train generator
 gan = build_gan(generator, discriminator)
 gan.compile(loss = 'binary_crossentropy', optimizer = 'adam')
 
 # train DC-GAN for the specified number of epochs
+# then draw loss and accuracy plots
 GAN_train()
 loss_plot(losses)
 acc_plot(accuracies)

@@ -47,7 +47,7 @@ def build_generator():
     model.add(Dense(28 * 28 * 1, activation = 'tanh'))
 
     # reshape generator output to image dimensions
-    # 784 output neurous used
+    # 784 output neurons used
     model.add(Reshape(img_shape))
     print('\n=== Generator summary')
     model.summary()
@@ -159,7 +159,7 @@ def train_GAN():
         z = np.random.normal(0, 1, (batch_size, noise))
 
         # note we train the entire gan but fix discriminator weights
-        # we fool discrminator that generator is producing real images
+        # we fool discriminator that generator is producing real images
         # generator does not generate accuracy
         discriminator.trainable = False
         g_loss = gan.train_on_batch(z, real)
@@ -178,6 +178,7 @@ def train_GAN():
             sample_images(itr)
 
 
+# we test generator with sample images
 def sample_images(itr):
 
     row = col = 4
@@ -209,19 +210,18 @@ def sample_images(itr):
     plt.close()
 
 
-# main build and compile module
-# read MNIST dataset, only thw training input set
-X_train = read_dataset()
-
-
 #################
 #  MAIN ROUTINE #
 #################
 
+# main build and compile module
+# read MNIST dataset, only the training input set
+X_train = read_dataset()
+
 # build discriminator
 discriminator = build_discriminator()
 discriminator.compile(loss = 'binary_crossentropy', optimizer = 'Adam',
-                      metrics=['accuracy'])
+    metrics = ['accuracy'])
 
 # we do not compile generator separately
 generator = build_generator()

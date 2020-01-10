@@ -16,7 +16,9 @@ from datetime import datetime
 from keras import Input, Model
 from keras.applications import InceptionResNetV2
 from keras.callbacks import TensorBoard
-from keras.layers import Conv2D, Flatten, Dense, BatchNormalization
+from keras.layers import Conv2D, Flatten, Dense
+from keras.layers import BatchNormalization
+
 from keras.layers import Reshape, concatenate, LeakyReLU, Lambda
 from keras.layers import Activation, UpSampling2D, Dropout
 from keras import backend as K
@@ -38,7 +40,6 @@ if not os.path.exists(OUT_DIR):
 
 
 # hyper-parameters and constants
-# for good results: epoch = 500, batch = 100
 epochs = 2
 batch_size = 100
 noise = 100
@@ -200,7 +201,7 @@ def build_discriminator():
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha = 0.2)(x)
 
-    # flattend to get 8192 neurons
+    # flattened to get 8192 neurons
     x = Flatten()(x)
 
     # final output is single value
@@ -227,27 +228,24 @@ def calculate_age(taken, dob):
 
 
 # load image data
-# we downselect 1000 images out of 62328 
+# we down select 1000 images out of 62328 
 def load_data():
 
-    # Load the wiki.mat file
-    # meta contains 4 dimesional dictionary
+    # load the matlab file
+    # meta contains 4 dimensional dictionary
     dataset = 'wiki'
     meta = loadmat(os.path.join(DB_DIR, DB_NAME))
     full_path = meta[dataset][0, 0]["full_path"][0]
     print('\nWe use', len(full_path), 'images.')
 
-
     # List of date-of-birth and year-taken data
     dob = meta[dataset][0, 0]["dob"][0]
     photo_taken = meta[dataset][0, 0]["photo_taken"][0]
 
-
     # Calculate age for all data
     age = [calculate_age(photo_taken[i], dob[i]) for i in range(len(dob))]
 
-
-    # Create a list of tuples containing a pair of an image path and age
+    # create a list of tuples containing image path and age
     images = []
     ages = []
 
@@ -288,42 +286,38 @@ def load_image(image_paths, image_shape):
 
     print("Image loading began.")
     for i, path in enumerate(image_paths):
-        try:
-            # load and resize images using keras image package
-            loaded_image = image.load_img(os.path.join(DB_DIR, path), 
-                target_size = image_shape)
+        # load and resize images using keras image package
+        loaded_image = image.load_img(os.path.join(DB_DIR, path), 
+            target_size = image_shape)
 
-            # convert PIL image to numpy ndarray
-            loaded_image = image.img_to_array(loaded_image)
+        # convert PIL image to numpy ndarray
+        loaded_image = image.img_to_array(loaded_image)
 
-            # add another dimension (add batch dimension)
-            # dimension becomes (1, 64, 64, 3)
-            loaded_image = np.expand_dims(loaded_image, axis = 0)
+        # add another dimension (add batch dimension)
+        # dimension becomes (1, 64, 64, 3)
+        loaded_image = np.expand_dims(loaded_image, axis = 0)
 
-            # concatenate all images into one tensor
-            # dimension becomes (1000, 64, 64, 3)
-            if images is None:
-                images = loaded_image
-            else:
-                images = np.concatenate([images, loaded_image], axis = 0)
+        # concatenate all images into one tensor
+        # dimension becomes (1000, 64, 64, 3)
+        if images is None:
+            images = loaded_image
+        else:
+            images = np.concatenate([images, loaded_image], axis = 0)
 
-        except Exception as e:
-            print("Error:", i, e)
     print("Image loading done.")
 
     return images
 
 
-# Euclidean distance loss
-# https://en.wikipedia.org/wiki/Euclidean_distance
-# :param y_true: TensorFlow/Theano tensor
-# :param y_pred: TensorFlow/Theano tensor of the same shape as y_true
-# :return: float
+# euclidean distance loss
+# y_true: tensor
+# y_pred: tensor of the same shape as y_true
+# return: float
 def euclidean_loss(y_true, y_pred):
     return K.sqrt(K.sum(K.square(y_pred - y_true), axis=-1))
 
 
-# save the given color iamge to the output directory
+# save the given color image to the output directory
 def save_rgb_img(img, path):
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
@@ -355,6 +349,7 @@ input_label = Input(shape = (6,))
 recon_image = generator([input_noise, input_label])
 valid = discriminator([recon_image, input_label])
 
+# setting up inputs and output
 GAN_model = Model(inputs = [input_noise, input_label], outputs = [valid])
 GAN_model.compile(loss = ['binary_crossentropy'], optimizer = 'adam')
 
@@ -386,14 +381,14 @@ images = load_image(paths, (image_shape[0], image_shape[1]))
 
 # train discriminator
 def train_disc(img_batch, y_batch, z_noise):
-    # Generate fake images
+    # generate fake images
     fakes = generator.predict_on_batch([z_noise, y_batch])
 
     # implement label smoothing
     real_labels = np.ones((batch_size, 1), dtype = np.float32) * 0.9
     fake_labels = np.zeros((batch_size, 1), dtype = np.float32) * 0.1
     
-    # train discrimonator using real and fake images
+    # train discriminator using real and fake images
     # we need both inputs: image and its age category
     d_loss_real = discriminator.train_on_batch([img_batch, y_batch], real_labels)
     d_loss_fake = discriminator.train_on_batch([fakes, y_batch], fake_labels)
@@ -510,7 +505,9 @@ if TRAIN_ENCODER:
     for epoch in range(epochs):
         print("Epoch:", epoch)
 
+        # compute the number of iterations in this epoch
         iter = int(num_data / batch_size)
+
         for index in range(iter):
 
             # fetch the next batch
@@ -554,16 +551,19 @@ def build_image_resizer():
 # input: 192 x 192 x 3 image
 # output: 128 values
 def build_fr_model(input_shape):
+
+    # borrow resnet
     resnet_model = InceptionResNetV2(include_top = False, weights = 'imagenet', 
         input_shape = input_shape, pooling = 'avg')
+
+    # embedder model
     image_input = resnet_model.input
     x = resnet_model.layers[-1].output
     out = Dense(128)(x)
-
     embedder_model = Model(inputs = [image_input], outputs = [out])
 
+    # recognizer model
     input_layer = Input(shape = input_shape)
-
     x = embedder_model(input_layer)
     output = Lambda(lambda x: K.l2_normalize(x, axis = -1))(x)
     model = Model(inputs = [input_layer], outputs = [output])
@@ -574,6 +574,8 @@ def build_fr_model(input_shape):
     return model
 
 
+# new GAN with encoder, generator, resizer, and recognizer
+# encoder and generator are pre-trained
 def build_new_GAN():
     # load the encoder network
     encoder = build_encoder()
@@ -609,7 +611,7 @@ def build_new_GAN():
     # give the enlarged image to resnet to obtain 128 features
     embeddings = fr_model(resized_images)
 
-    # create a new GAN model
+    # create the final GAN model
     fr_GAN_model = Model(inputs = [input_image, input_label], outputs = [embeddings])
     print('\n=== Face recognizer GAN summary')
     fr_GAN_model.summary()
@@ -635,6 +637,7 @@ if TRAIN_GAN_WITH_FR:
         iter = int(len(images) / batch_size)
 
         for index in range(iter):
+
             # fetch the next batch of images
             img_batch = images[index * batch_size:(index + 1) * batch_size]
             img_batch = img_batch / 127.5 - 1.0
@@ -653,4 +656,6 @@ if TRAIN_GAN_WITH_FR:
             loss = fr_GAN_model.train_on_batch([img_batch, y_batch], real)
 
             print('   Batch:', index, ', loss: %.4f' % loss)
+
+        # test generator and save images
         test_gen(epoch)

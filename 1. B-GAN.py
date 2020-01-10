@@ -36,6 +36,7 @@ G_SIZE = 50
 D_LEARN = 1
 G_LEARN = 5
 
+# additional definitions
 MY_MU = 10
 MY_SIGMA = 0.25
 MY_ADAM = Adam(lr = 0.0002, beta_1 = 0.9, beta_2 = 0.999)
@@ -44,7 +45,7 @@ MY_ADAM = Adam(lr = 0.0002, beta_1 = 0.9, beta_2 = 0.999)
 # we use the same compilation setting for all models
 def model_compile(model):
     return model.compile(loss = 'binary_crossentropy', optimizer = MY_ADAM, 
-            metrics=['accuracy'])
+            metrics = ['accuracy'])
 
 
 ####################
@@ -120,11 +121,11 @@ def train_epochs(gan, dis, gen):
     for e in range(MY_EPOCH):
 
         # discriminator training
-        # each time we train using a real data first
-        # then a fake data next
+        # we train using a real data first then a fake next
         for i in range(D_LEARN):
             real = real_sample()
             Z = in_sample()
+
             fake = gen.predict(Z)
             dis.trainable = True
             X = np.concatenate([real, fake], axis = 0)
@@ -146,15 +147,14 @@ def train_epochs(gan, dis, gen):
 # MODEL EVALUATION #
 ####################
 
-
-# main routine to orchestrate the test process
-# we do not use discriminator
-# we just compare real and fake and want them to be close
+# we test generator
+# we compare real and fake and want them to be close
 def test_and_show(gen):
 
     Z = np.random.rand(MY_TEST, NUM_DATA)
     fake = gen.predict(Z)
     real = np.random.normal(MY_MU, MY_SIGMA, (MY_TEST, NUM_DATA))
+    
     plt.hist(real.reshape(-1), histtype = 'step', label = 'Real')
     plt.hist(fake.reshape(-1), histtype = 'step', label = 'Generated')
     plt.hist(Z.reshape(-1), histtype = 'step', label = 'Input')
