@@ -62,17 +62,17 @@ def build_generator():
 
     # 1st convolution block
     x = Conv2D(32, kernel_size = 7, strides = 1, padding = "same")(input_layer)
-    x = BatchNormalization(axis = 1)(x)
+    x = BatchNormalization()(x)
     x = Activation("relu")(x)
 
     # 2nd convolution block
     x = Conv2D(64, kernel_size = 3, strides = 2, padding = "same")(x)
-    x = BatchNormalization(axis = 1)(x)
+    x = BatchNormalization()(x)
     x = Activation("relu")(x)
 
     # 3rd convolution block
     x = Conv2D(128, kernel_size = 3, strides = 2, padding = "same")(x)
-    x = BatchNormalization(axis = 1)(x)
+    x = BatchNormalization()(x)
     x = Activation("relu")(x)
 
     # residual blocks
@@ -81,12 +81,12 @@ def build_generator():
 
     # 1st upsampling block
     x = Conv2DTranspose(64, kernel_size = 3, strides = 2, padding='same', use_bias = False)(x)
-    x = BatchNormalization(axis = 1)(x)
+    x = BatchNormalization()(x)
     x = Activation("relu")(x)
 
     # 2nd upsampling block
     x = Conv2DTranspose(32, kernel_size = 3, strides = 2, padding='same', use_bias = False)(x)
-    x = BatchNormalization(axis = 1)(x)
+    x = BatchNormalization()(x)
     x = Activation("relu")(x)
 
     # final convolution layer
@@ -111,7 +111,7 @@ def build_discriminator():
     # 3 hidden convolution blocks
     for i in range(1, hidden_layers + 1):
         x = Conv2D(2 ** i * 64, kernel_size = 4, strides = 2, padding = "valid")(x)
-        x = BatchNormalization(axis = 1)(x)
+        x = BatchNormalization()(x)
         x = LeakyReLU(alpha = 0.2)(x)
         x = ZeroPadding2D(padding = (1, 1))(x)
 
@@ -347,7 +347,7 @@ if mode == 'train':
     for epoch in range(epochs):
         print("Epoch:{}".format(epoch))
 
-        num_batches = int(min(imagesA.shape[0], imagesB.shape[0]) / batch_size / 3)
+        num_batches = int(min(imagesA.shape[0], imagesB.shape[0]) / batch_size)
         print("   Number of batches: {}".format(num_batches))
 
         for index in range(num_batches):
