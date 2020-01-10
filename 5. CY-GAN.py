@@ -19,7 +19,6 @@ from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, BatchNormalization, Activation
 from keras.layers import Add, Conv2DTranspose, ZeroPadding2D, LeakyReLU
 from keras.optimizers import Adam
-from keras_contrib.layers.normalization.instancenormalization import InstanceNormalization
 from imageio import imread
 from skimage.transform import resize
 
@@ -47,11 +46,11 @@ if not os.path.exists(OUT_DIR):
 # residual block used in the two generators
 def residual_block(x):
     res = Conv2D(128, kernel_size = 3, strides = 1, padding = "same")(x)
-    res = BatchNormalization(axis=3, momentum=0.9, epsilon = 1e-5)(res)
+    res = BatchNormalization(axis = 3, momentum=0.9, epsilon = 1e-5)(res)
     res = Activation('relu')(res)
 
     res = Conv2D(128, kernel_size = 3, strides = 1, padding = "same")(res)
-    res = BatchNormalization(axis=3, momentum = 0.9, epsilon = 1e-5)(res)
+    res = BatchNormalization(axis = 3, momentum = 0.9, epsilon = 1e-5)(res)
 
     return Add()([res, x])
 
@@ -63,17 +62,17 @@ def build_generator():
 
     # 1st convolution block
     x = Conv2D(32, kernel_size = 7, strides = 1, padding = "same")(input_layer)
-    x = InstanceNormalization(axis = 1)(x)
+    x = BatchNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
     # 2nd convolution block
     x = Conv2D(64, kernel_size = 3, strides = 2, padding = "same")(x)
-    x = InstanceNormalization(axis = 1)(x)
+    x = BatchNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
     # 3rd convolution block
     x = Conv2D(128, kernel_size = 3, strides = 2, padding = "same")(x)
-    x = InstanceNormalization(axis = 1)(x)
+    x = BatchNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
     # residual blocks
@@ -82,12 +81,12 @@ def build_generator():
 
     # 1st upsampling block
     x = Conv2DTranspose(64, kernel_size = 3, strides = 2, padding='same', use_bias = False)(x)
-    x = InstanceNormalization(axis = 1)(x)
+    x = BatchNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
     # 2nd upsampling block
     x = Conv2DTranspose(32, kernel_size = 3, strides = 2, padding='same', use_bias = False)(x)
-    x = InstanceNormalization(axis = 1)(x)
+    x = BatchNormalization(axis = 1)(x)
     x = Activation("relu")(x)
 
     # final convolution layer
@@ -112,7 +111,7 @@ def build_discriminator():
     # 3 hidden convolution blocks
     for i in range(1, hidden_layers + 1):
         x = Conv2D(2 ** i * 64, kernel_size = 4, strides = 2, padding = "valid")(x)
-        x = InstanceNormalization(axis = 1)(x)
+        x = BatchNormalization(axis = 1)(x)
         x = LeakyReLU(alpha = 0.2)(x)
         x = ZeroPadding2D(padding = (1, 1))(x)
 
@@ -279,32 +278,32 @@ def load_test_batch():
 def save_images(oriA, genB, reconA, oriB, genA, reconB, path):
     fig = plt.figure()
     ax = fig.add_subplot(2, 3, 1)
-    ax.imshow(oriA)
+    ax.imshow((oriA * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Original")
 
     ax = fig.add_subplot(2, 3, 2)
-    ax.imshow(genB)
+    ax.imshow((genB * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Generated")
 
     ax = fig.add_subplot(2, 3, 3)
-    ax.imshow(reconA)
+    ax.imshow((reconA * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Reconstructed")
 
     ax = fig.add_subplot(2, 3, 4)
-    ax.imshow(oriB)
+    ax.imshow((oriB * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Original")
 
     ax = fig.add_subplot(2, 3, 5)
-    ax.imshow(genA)
+    ax.imshow((genA * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Generated")
 
     ax = fig.add_subplot(2, 3, 6)
-    ax.imshow(reconB)
+    ax.imshow((reconB * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Reconstructed")
 
@@ -348,7 +347,7 @@ if mode == 'train':
     for epoch in range(epochs):
         print("Epoch:{}".format(epoch))
 
-        num_batches = int(min(imagesA.shape[0], imagesB.shape[0]) / batch_size)
+        num_batches = int(min(imagesA.shape[0], imagesB.shape[0]) / batch_size / 3)
         print("   Number of batches: {}".format(num_batches))
 
         for index in range(num_batches):
