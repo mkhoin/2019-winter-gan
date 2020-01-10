@@ -1,5 +1,6 @@
 # Image Resolution Enhancement with Super Resolution GAN (SR-GAN)
-# July 21, 2019
+# Dataset: Celebrity Photos
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -19,12 +20,13 @@ from keras.layers import LeakyReLU, Add, Dense
 from keras.layers.convolutional import Conv2D, UpSampling2D
 from keras.models import Model
 from keras.optimizers import Adam
-from scipy.misc import imresize, imread
+from imageio import imread
+from skimage.transform import resize
 
 
 # global constants and hyper-parameters
-MY_EPOCH = 100
-MY_BATCH = 1
+MY_EPOCH = 10
+MY_BATCH = 2
 LOW_SHAPE = (64, 64, 3)
 HIGH_SHAPE = (256, 256, 3)
 DIS_ANS = (MY_BATCH, 16, 16, 1)
@@ -41,7 +43,7 @@ TRAINING_DONE = 0
 
 
 # directories
-DB_DIR = "./database/celeb/*.*"
+DB_DIR = "./dataset/celeb/*.*"
 OUT_DIR = "./ch6-output"
 LOG_DIR = "./logs"
 
@@ -53,16 +55,15 @@ if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 
-    ####################
-    # DATABASE SETTING #
-    ####################
+####################
+# DATABASE SETTING #
+####################
 
 
 # pick some random images from the celebrity database
 def sample_images(batch_size):
 
-    # make a list of all images inside the data directory
-    # then choose a random batch of images
+    # choose a random batch of images
     # the images in the database has 178 x 218 resolution
     all_images = glob.glob(DB_DIR)
     images_batch = np.random.choice(all_images, size = batch_size)
@@ -72,16 +73,15 @@ def sample_images(batch_size):
     for img in images_batch:
         # Get an ndarray of the current image
         # image shape is (218, 178, 3)
-        new_img = imread(img, mode = 'RGB')
+        new_img = imread(img, pilmode = 'RGB')
         new_img = new_img.astype(np.float32)
 
 
         # Resize the image from (218, 178, 3) to
         # high_shape = (256, 256, 3)
         # low_shape = (64, 64, 3)
-        new_img_high = imresize(new_img, HIGH_SHAPE)
-        new_img_low = imresize(new_img, LOW_SHAPE)
-
+        new_img_high = resize(new_img, HIGH_SHAPE)
+        new_img_low = resize(new_img, LOW_SHAPE)
 
         # Do a random horizontal flip
         if np.random.random() < 0.5:
@@ -96,9 +96,9 @@ def sample_images(batch_size):
     return np.array(high_img), np.array(low_img)
 
 
-    ##################
-    # MODEL BUILDING #
-    ##################
+##################
+# MODEL BUILDING #
+##################
 
 
 # use pre-trained VGG model
@@ -230,42 +230,32 @@ def build_generator():
     gen1 = Conv2D(64, (9, 9), strides = 1, padding = 'same', 
             activation = 'relu')(input_layer)
 
-    print('\n== GENERATOR MODEL SUMMARY ==')
-    print('Input shape:', input_shape)
-    print('After pre-residual:', gen1.shape)
-
     # Add 15 residual blocks
     res = residual_block(gen1)
     for i in range(MY_RESIDUAL):
         res = residual_block(res)
-    print('After adding residual:', res.shape)
 
     # post-residual block
     gen2 = MY_CONV(64, 3, 1)(res)
     gen2 = BatchNormalization(momentum = MY_MOM)(gen2)
-    print('After post-residual', gen2.shape)
 
     # take the sum of the output from pre-residual block (gen1) 
     # and the post-residual block (gen2)
     gen3 = Add()([gen2, gen1])
-    print('After adding pre- and post-residual', gen3.shape)
 
     # add an upsampling block
     gen4 = UpSampling2D(size = 2)(gen3)
     gen4 = MY_CONV(256, 3, 1)(gen4)
     gen4 = Activation('relu')(gen4)
-    print('After first upscaling', gen4.shape)
 
     # add another upsampling block
     gen5 = UpSampling2D(size = 2)(gen4)
     gen5 = MY_CONV(256, 3, 1)(gen5)
     gen5 = Activation('relu')(gen5)
-    print('After second upscaling', gen5.shape)
 
     # output convolution layer
     gen6 = MY_CONV(3, 9, 1)(gen5)
     output = Activation('tanh')(gen6)
-    print('Shape of the generator output', output.shape)
 
     # Keras model of our generator
     model = Model(inputs = [input_layer], outputs = [output])
@@ -338,9 +328,9 @@ def build_GAN():
     return vgg, discriminator, generator, gan_model, tensorboard
 
 
-    ##################
-    # MODEL TRAINING #
-    ##################
+##################
+# MODEL TRAINING #
+##################
 
 
 # write train data to tensorboard
@@ -423,6 +413,53 @@ def train_G():
     return g_loss
 
 
+# save low-resolution, high-resolution (original) and
+# fake high-resolution images 
+# add_subplot needs (nrows, ncols, index) 
+def save_images(low_res_image, original_image, fake_image, path):
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 3, 1)
+    ax.imshow((low_res_image * 127.5 + 127.5).astype(np.uint8))
+    ax.axis("off")
+    ax.set_title("Low-resolution")
+
+    ax = fig.add_subplot(1, 3, 2)
+    ax.imshow((original_image * 127.5 + 127.5).astype(np.uint8))
+    ax.axis("off")
+    ax.set_title("Original")
+
+    ax = fig.add_subplot(1, 3, 3)
+    ax.imshow((fake_image * 127.5 + 127.5).astype(np.uint8))
+    ax.axis("off")
+    ax.set_title("Fake")
+
+    plt.savefig(path)
+    plt.close()
+
+
+# we pick two random images to test our GAN model
+# we compare 3 variations for each image:
+#    1. low resolution (input)
+#    2. high resolution (truth)
+#    3. high resolution (fake) 
+def evaluate_GAN(generator, discriminator, epoch):
+
+    for i in range(2):
+
+        # sample a new batch of images
+        # and normalize the pixel values to [-1, 1]
+        # this works well with tanh activation
+        real_high, real_low = sample_images(MY_BATCH)
+        real_high = real_high / 127.5 - 1.
+        real_low = real_low / 127.5 - 1.
+
+        # we use generator to turn a low resolution image to high        
+        # and save the 3 image files
+        fake_image = generator.predict_on_batch(real_low)
+        path = os.path.join(OUT_DIR, "img_{}_{}".format(epoch, i))
+        save_images(real_low[0], real_high[0], fake_image[0], path)
+
+
 # overall GAN training
 # we alternate between discriminator and generator training 
 # during generator training, discriminator is not trained
@@ -441,7 +478,7 @@ def train_GAN(vgg, discriminator, generator, gan_model, TB):
         print("  Generator loss:", g_loss[0])
         write_log(TB, 'g_loss', g_loss[0], epoch)
         write_log(TB, 'd_loss', d_loss[0], epoch)
-
+        evaluate_GAN(generator, discriminator, epoch)
 
     # report final loss
     print('\n== FINAL LOSS INFO ==')
@@ -450,71 +487,20 @@ def train_GAN(vgg, discriminator, generator, gan_model, TB):
 
 
     # Save models
-    generator.save_weights("model/chap6-gen.h5")
-    discriminator.save_weights("model/chap6-dis.h5")
+    generator.save_weights(os.path.join(OUT_DIR, "generator.h5"))
+    discriminator.save_weights(os.path.join(OUT_DIR, "discriminator.h5"))
 
 
-# save low-resolution, high-resolution (original) and
-# fake high-resolution images 
-# add_subplot needs (nrows, ncols, index) 
-def save_images(low_res_image, original_image, fake_image, path):
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 3, 1)
-    ax.imshow(low_res_image)
-    ax.axis("off")
-    ax.set_title("Low-resolution")
-
-    ax = fig.add_subplot(1, 3, 2)
-    ax.imshow(original_image)
-    ax.axis("off")
-    ax.set_title("Original")
-
-    ax = fig.add_subplot(1, 3, 3)
-    ax.imshow(fake_image)
-    ax.axis("off")
-    ax.set_title("Fake")
-
-    plt.savefig(path)
-
-
-    ####################
-    # MODEL EVALUATION #
-    ####################
-
-
-# we pick 5 random images to test our GAN model
-# we compare 3 variations for each image:
-#    1. low resolution (input)
-#    2. high resolution (truth)
-#    3. high resolution (fake) 
-def evaluate_GAN(generator, discriminator):
-
-    for i in range(5):
-
-        # sample a new batch of images
-        # and normalize the pixel values to [-1, 1]
-        # this works well with tanh activation
-        real_high, real_low = sample_images(MY_BATCH)
-        real_high = real_high / 127.5 - 1.
-        real_low = real_low / 127.5 - 1.
-
-
-        # we use generator to turn a low resolution image to high        
-        # and save the 3 image files
-        fake_image = generator.predict_on_batch(real_low)
-        path = "output/chap6-img-{}".format(i)
-        real_low = real_low.reshape(LOW_SHAPE)
-        real_high = real_high.reshape(HIGH_SHAPE)
-        fake_image = fake_image.reshape(HIGH_SHAPE)
-        save_images(real_low, real_high, fake_image, path)
-
+####################
+# MODEL EVALUATION #
+####################
 
 # prediction with GAN
 def gan_prediction():
 
     # we just need a trained generator
     generator = build_generator()
-    generator.load_weights("model/chap6-gen.h5")
+    generator.load_weights(os.path.join(OUT_DIR, "generator.h5"))
 
     for i in range(5):
         # sample a new batch of images
@@ -527,11 +513,8 @@ def gan_prediction():
         # we use generator to tunr a low resolution image to high        
         # and save the 3 image files
         fake_image = generator.predict_on_batch(real_low)
-        path = "output/chap6-img-pred-{}".format(i)
-        real_low = real_low.reshape(LOW_SHAPE)
-        real_high = real_high.reshape(HIGH_SHAPE)
-        fake_image = fake_image.reshape(HIGH_SHAPE)
-        save_images(real_low, real_high, fake_image, path)
+        path = os.path.join(OUT_DIR, "pred-{}".format(i))
+        save_images(real_low[0], real_high[0], fake_image[0], path)
 
 
 # if training is not done, we do training and save the models
@@ -539,7 +522,7 @@ def gan_prediction():
 if not TRAINING_DONE:
     vgg, discriminator, generator, gan_model, tensorboard = build_GAN()
     train_GAN(vgg, discriminator, generator, gan_model, tensorboard)
-    evaluate_GAN(generator, discriminator)
+
 else:
     gan_prediction()
     exit()

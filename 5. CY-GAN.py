@@ -1,5 +1,6 @@
 # Turning Paintings into Photos using Cycle-GAN (CY-GAN)
-# January 8, 2020
+# Dataset: Monet Paintings and Photos
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -158,68 +159,6 @@ def load_images():
     return allImagesA, allImagesB
 
 
-# pick the next batch of random images
-# to test GAN and save the resulting images
-def load_test_batch():
-    imagesA = glob(data_dir + 'testA/*.*')
-    imagesB = glob(data_dir + 'testB/*.*')
-
-    imagesA = np.random.choice(imagesA, batch_size)
-    imagesB = np.random.choice(imagesB, batch_size)
-
-    allA = []
-    allB = []
-
-    for i in range(len(imagesA)):
-        # load and resize images
-        imgA = resize(imread(imagesA[i], pilmode='RGB').astype(np.float32), (128, 128))
-        imgB = resize(imread(imagesB[i], pilmode='RGB').astype(np.float32), (128, 128))
-
-        allA.append(imgA)
-        allB.append(imgB)
-
-    # scaling the raw data
-    return np.array(allA) / 127.5 - 1.0, np.array(allB) / 127.5 - 1.0
-
-
-# show 3 images per sample: original, generated, and reconstructed
-# the first set is paintings, the secone set photos
-# this code works for batch = 2
-def save_images(oriA, genB, reconA, oriB, genA, reconB, path):
-    fig = plt.figure()
-    ax = fig.add_subplot(batch_size, 3, 1)
-    ax.imshow(oriA)
-    ax.axis("off")
-    ax.set_title("Original")
-
-    ax = fig.add_subplot(batch_size, 3, 2)
-    ax.imshow(genB)
-    ax.axis("off")
-    ax.set_title("Generated")
-
-    ax = fig.add_subplot(batch_size, 3, 3)
-    ax.imshow(reconA)
-    ax.axis("off")
-    ax.set_title("Reconstructed")
-
-    ax = fig.add_subplot(batch_size, 3, 4)
-    ax.imshow(oriB)
-    ax.axis("off")
-    ax.set_title("Original")
-
-    ax = fig.add_subplot(batch_size, 3, 5)
-    ax.imshow(genA)
-    ax.axis("off")
-    ax.set_title("Generated")
-
-    ax = fig.add_subplot(batch_size, 3, 6)
-    ax.imshow(reconB)
-    ax.axis("off")
-    ax.set_title("Reconstructed")
-
-    plt.savefig(path)
-
-
 # build two discriminators
 # A is painting, B is photo
 # note that discriminators need compilation
@@ -311,8 +250,69 @@ def build_GAN(discriminatorA, discriminatorB, generatorAtoB, generatorBtoA):
     return CGAN   
 
 
-# test CGAN on two sample images
-def test_CGAN(epoch):
+# pick the next batch of random images
+# to test GAN and save the resulting images
+def load_test_batch():
+    imagesA = glob(data_dir + 'testA/*.*')
+    imagesB = glob(data_dir + 'testB/*.*')
+
+    imagesA = np.random.choice(imagesA, batch_size)
+    imagesB = np.random.choice(imagesB, batch_size)
+
+    allA = []
+    allB = []
+
+    for i in range(len(imagesA)):
+        # load and resize images
+        imgA = resize(imread(imagesA[i], pilmode='RGB').astype(np.float32), (128, 128))
+        imgB = resize(imread(imagesB[i], pilmode='RGB').astype(np.float32), (128, 128))
+
+        allA.append(imgA)
+        allB.append(imgB)
+
+    # scaling the raw data
+    return np.array(allA) / 127.5 - 1.0, np.array(allB) / 127.5 - 1.0
+
+
+# show 3 images per sample: original, generated, and reconstructed
+# the first set is paintings, the secone set photos
+def save_images(oriA, genB, reconA, oriB, genA, reconB, path):
+    fig = plt.figure()
+    ax = fig.add_subplot(2, 3, 1)
+    ax.imshow(oriA)
+    ax.axis("off")
+    ax.set_title("Original")
+
+    ax = fig.add_subplot(2, 3, 2)
+    ax.imshow(genB)
+    ax.axis("off")
+    ax.set_title("Generated")
+
+    ax = fig.add_subplot(2, 3, 3)
+    ax.imshow(reconA)
+    ax.axis("off")
+    ax.set_title("Reconstructed")
+
+    ax = fig.add_subplot(2, 3, 4)
+    ax.imshow(oriB)
+    ax.axis("off")
+    ax.set_title("Original")
+
+    ax = fig.add_subplot(2, 3, 5)
+    ax.imshow(genA)
+    ax.axis("off")
+    ax.set_title("Generated")
+
+    ax = fig.add_subplot(2, 3, 6)
+    ax.imshow(reconB)
+    ax.axis("off")
+    ax.set_title("Reconstructed")
+
+    plt.savefig(path)
+
+
+# test CGAN on the first batch
+def test_CGAN(epoch, index):
     # Get two sample sets
     batchA, batchB = load_test_batch()
 
@@ -324,9 +324,9 @@ def test_CGAN(epoch):
     reconA = generatorBtoA.predict(genB)
     reconB = generatorAtoB.predict(genA)
 
-    for i in range(batch_size):
-        save_images(batchA[i], genB[i], reconA[i], batchB[i], genA[i], reconB[i],
-            path = "ch6-output/gen_{}_{}".format(epoch, i))
+    # save one image file per epoch per iteration
+    save_images(batchA[0], genB[0], reconA[0], batchB[0], genA[0], reconB[0],
+        path = os.path.join(OUT_DIR, "gen_{}_{}".format(epoch + 1, index + 1)))
 
 
 # train cycle-GAN
@@ -382,12 +382,12 @@ if mode == 'train':
 
             print("         g_loss:{}".format(g_loss))
 
-        test_CGAN(epoch)
+            test_CGAN(epoch, index)
 
 
     # save models for prediction 
-    generatorAtoB.save_weights("ch6-output/generatorAToB.h5")
-    generatorBtoA.save_weights("ch6-output/generatorBToA.h5")
+    generatorAtoB.save_weights(os.path.join(OUT_DIR, "generatorAToB.h5"))
+    generatorBtoA.save_weights(os.path.join(OUT_DIR, "generatorBToA.h5"))
 
 
 # use cycle-GAN for prediction
@@ -398,8 +398,8 @@ if mode == 'test':
     generatorAtoB = build_generator()
     generatorBtoA = build_generator()
 
-    generatorAtoB.load_weights("ch6-output/generatorAtoB.h5")
-    generatorBtoA.load_weights("ch6-output/generatorBtoA.h5")
+    generatorAtoB.load_weights(os.path.join(OUT_DIR, "generatorAToB.h5"))
+    generatorBtoA.load_weights(os.path.join(OUT_DIR, "generatorBToA.h5"))
 
     # get a batch of test data
     batchA, batchB = load_test_batch()
@@ -414,4 +414,5 @@ if mode == 'test':
     # save images
     for i in range(len(genA)):
         save_images(batchA[i], genB[i], reconA[i], batchB[i], genA[i], reconB[i],
-            path="ch6-output/test_{}".format(i))
+            path = os.path.join(OUT_DIR, "test_{}".format(i)))
+

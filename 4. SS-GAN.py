@@ -1,6 +1,6 @@
 # MNIST Hand-written Digit Generation with Semi-Supervied GAN (SS-GAN)
-# Our GAN is built using CNNs
-# January 4, 2020
+# Dataset: MNIST
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-from keras import backend as K
 from keras.datasets import mnist
+from keras import backend as K
 from keras.layers import Activation, BatchNormalization, Concatenate, Dense
 from keras.layers import Dropout, Flatten, Input, Lambda, Reshape
 from keras.layers.advanced_activations import LeakyReLU
@@ -32,9 +32,9 @@ noise = 100
 num_classes = 10
 
 # Set hyperparameters
-epochs = 1000
+epochs = 500
 batch_size = 100
-sample_interval = 100
+sample_interval = 10
 
 # Number of labeled examples to use (rest will be used as unlabeled)
 num_labeled = 100

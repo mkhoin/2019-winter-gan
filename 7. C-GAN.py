@@ -1,5 +1,6 @@
 # Face Aging Using Conditional GAN (C-GAN)
-# January 7, 2020
+# Dataset: Face Shots
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -27,7 +28,7 @@ from keras.models import Sequential
 
 
 # directories
-DB_DIR = "./dataset/wiki_crop/"
+DB_DIR = "./dataset/face/"
 OUT_DIR = "./ch7-output/"
 
 
@@ -43,7 +44,7 @@ batch_size = 100
 noise = 100
 num_class = 6
 num_data = 1000
-DB_NAME = 'ch3-1000.mat'
+DB_NAME = '1000-data.mat'
 image_shape = (64, 64, 3)
 fr_image_shape = (192, 192, 3)
 
@@ -326,7 +327,8 @@ def euclidean_loss(y_true, y_pred):
 def save_rgb_img(img, path):
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.imshow(img)
+
+    ax.imshow((img * 127.5 + 127.5).astype(np.uint8))
     ax.axis("off")
     ax.set_title("Image")
 
@@ -437,8 +439,9 @@ def test_gen(epoch):
     
     # save the first 5 image files
     for i, img in enumerate(gen_images[:5]):
-        save_rgb_img(img, path = "ch3-output/img_{}_{}.png".format(epoch, i))
-        
+        path = os.path.join(OUT_DIR, "img_{}_{}".format(epoch, i))
+        save_rgb_img(img, path)
+
 
 # main GAN train function
 if TRAIN_GAN:
@@ -473,8 +476,8 @@ if TRAIN_GAN:
         test_gen(epoch)
 
     # save networks
-    generator.save_weights("ch3-output/generator.h5")
-    discriminator.save_weights("ch3-output/discriminator.h5")
+    generator.save_weights(os.path.join(OUT_DIR, "generator.h5"))
+    discriminator.save_weights(os.path.join(OUT_DIR, "discriminator.h5"))
 
 
 #################
@@ -491,7 +494,7 @@ if TRAIN_ENCODER:
     encoder.compile(loss = euclidean_loss, optimizer = 'adam')
 
     # load generator weights
-    generator.load_weights("ch3-output/generator.h5")
+    generator.load_weights(os.path.join(OUT_DIR, "generator.h5"))
 
     # generate random noise input
     noise = np.random.normal(0, 1, size = (num_data, noise))
@@ -523,7 +526,7 @@ if TRAIN_ENCODER:
             print('   Batch:', index, ', e_loss: %.4f' % e_loss)
 
     # save the encoder model
-    encoder.save_weights("ch3-output/encoder.h5")
+    encoder.save_weights(os.path.join(OUT_DIR, "encoder.h5"))
 
 
 ##################################
@@ -574,11 +577,12 @@ def build_fr_model(input_shape):
 def build_new_GAN():
     # load the encoder network
     encoder = build_encoder()
-    encoder.load_weights("ch3-output/encoder.h5")
+    encoder.load_weights(os.path.join(OUT_DIR, "encoder.h5"))
 
     # load the generator network
-    generator.load_weights("ch3-output/generator.h5")
+    generator.load_weights(os.path.join(OUT_DIR, "generator.h5"))
 
+    # build image resizer network
     image_resizer = build_image_resizer()
     image_resizer.compile(loss = ['binary_crossentropy'], optimizer = 'adam')
 

@@ -1,6 +1,6 @@
 # MNIST Hand-written Digit Generation with Deep Convolutional GAN (DC-GAN)
-# Our GAN is built using DNNs
-# December 28, 2019
+# Dataset: MNIST
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -20,7 +20,7 @@ from keras.optimizers import Adam
  
 
 # hyperparameters and constants
-epoch = 100
+epoch = 500
 batch_size = 128
 sample_interval = 10
 
@@ -170,7 +170,7 @@ def sample_images(itr):
             axs[i, j].axis('off')
             cnt += 1
 
-    path = os.path.join(OUT_DIR, "img-{}".format(itr))
+    path = os.path.join(OUT_DIR, "img-{}".format(itr + 1))
     plt.savefig(path)
     plt.close()
 
@@ -222,7 +222,7 @@ def GAN_train():
     # labels for fake images: all zeros
     fake = np.zeros((batch_size, 1))
 
-    print('\n\n\nStar GAN training!')
+    print('\n\n\nStart GAN training!')
 
     for itr in range(epoch):
         d_loss, accuracy = disc_train(X_train, real, fake)
@@ -266,7 +266,7 @@ def loss_plot(losses):
 def acc_plot(accuracies):
     accuracies = np.array(accuracies)
     plt.figure(figsize=(15, 5))
-    plt.plot(checkpoints, accuracies, label="Discriminator accuracy")
+    plt.plot(checkpoints, accuracies, label = "Discriminator accuracy")
 
     plt.xticks(checkpoints, rotation=90)
     plt.yticks(range(0, 100, 5))

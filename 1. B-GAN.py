@@ -1,5 +1,6 @@
 # Spread Matching with Basic GAN (B-GAN)
-# July 5, 2019
+# Dataset: randon normal distribution
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -175,7 +176,7 @@ def run(gan, dis, gen):
         train_epochs(gan, dis, gen)
         test_and_show(gen)
 
-        path = "output/chap4-img-{}".format(i)
+        path = os.path.join(OUT_DIR, "img-{}".format(i))
         plt.savefig(path)
         plt.close()
 

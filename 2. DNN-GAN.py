@@ -1,6 +1,6 @@
 # MNIST Hand-written Digit Generation with Deep Neural Network GAN (DNN-GAN)
-# Our GAN is built using DNNs
-# December 28, 2019
+# Dataset: MNIST
+# January 9, 2020
 # Sung Kyu Lim
 # Georgia Institute of Technology
 # limsk@ece.gatech.edu
@@ -19,7 +19,7 @@ from keras.optimizers import Adam
 
 
 # global constants and hyper-parameters
-epoch = 1000
+epoch = 10000
 batch_size = 100
 sample_interval = 100
 noise = 100
