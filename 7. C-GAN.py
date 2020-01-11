@@ -159,9 +159,9 @@ def build_generator():
 # works the same way as numpy.expand_dims()
 # inserts a new dimension “at the given axis”
 def expand_label(x):
-    x = tf.expand_dims(x, axis = 1)
-    x = tf.expand_dims(x, axis = 1)
-    x = tf.tile(x, [1, 32, 32, 1])
+    x = K.expand_dims(x, axis = 1)
+    x = K.expand_dims(x, axis = 1)
+    x = K.tile(x, [1, 32, 32, 1])
 
     return x
 
