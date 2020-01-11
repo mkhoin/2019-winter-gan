@@ -18,7 +18,7 @@ from keras import Input, Model
 from keras.applications import InceptionResNetV2
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Flatten, Dense
-from keras.layers import BatchNormalization
+from keras.layers import BatchNormalization, K
 
 from keras.layers import Reshape, concatenate, LeakyReLU, Lambda
 from keras.layers import Activation, UpSampling2D, Dropout
@@ -312,14 +312,6 @@ def load_image(image_paths, image_shape):
     return images
 
 
-# euclidean distance loss
-# y_true: tensor
-# y_pred: tensor of the same shape as y_true
-# return: float
-def euclidean_loss(y_true, y_pred):
-    return sqrt(sum(square(y_pred - y_true), axis=-1))
-
-
 # save the given color image to the output directory
 def save_rgb_img(img, path):
     fig = plt.figure()
@@ -489,7 +481,7 @@ if TRAIN_ENCODER:
 
     # build and compile encoder
     encoder = build_encoder()
-    encoder.compile(loss = euclidean_loss, optimizer = 'adam')
+    encoder.compile(loss = 'mse', optimizer = 'adam')
 
     # load generator weights
     generator.load_weights(os.path.join(OUT_DIR, "generator.h5"))
@@ -540,7 +532,7 @@ def build_image_resizer():
     # keras lambda layer:
     # custom layer that is not prebuilt and 
     # does not require trainable weights
-    resized_images = Lambda(lambda x: resize_images(x, 
+    resized_images = Lambda(lambda x: K.resize_images(x, 
         height_factor = 3, width_factor = 3, 
         data_format = 'channels_last'))(input_layer)
 
@@ -571,7 +563,7 @@ def build_fr_model(input_shape):
     # recognizer model
     input_layer = Input(shape = input_shape)
     x = embedder_model(input_layer)
-    output = Lambda(lambda x: l2_normalize(x, axis = -1))(x)
+    output = Lambda(lambda x: K.l2_normalize(x, axis = -1))(x)
     model = Model(inputs = [input_layer], outputs = [output])
 
     print('\n=== Resnet face recognizer summary')
@@ -610,7 +602,7 @@ def build_new_GAN():
     gen_images = generator([latent, input_label])
 
     # increase the image size by 3x
-    resized_images = Lambda(lambda x: resize_images(gen_images, 
+    resized_images = Lambda(lambda x: K.resize_images(gen_images, 
         height_factor = 3, width_factor = 3,
         data_format = 'channels_last'))(gen_images)
 
@@ -623,7 +615,7 @@ def build_new_GAN():
     fr_GAN_model.summary()
 
     # compile the model
-    fr_GAN_model.compile(loss = euclidean_loss, optimizer = 'adam')
+    fr_GAN_model.compile(loss = 'mse', optimizer = 'adam')
 
     return image_resizer, fr_model, fr_GAN_model
 
