@@ -350,7 +350,7 @@ train()
 # SEMI-SUPERVISED DISCRIMINATOR #
 #################################
 
-# evaluating semi-supervised trained dsicriminator
+# evaluating semi-supervised trained discriminator
 # compute classification accuracy on the training set
 print('\n=== SEMI-SUPERVISED DISCRMINATOR EVALUATION')
 x, y = training_set()
