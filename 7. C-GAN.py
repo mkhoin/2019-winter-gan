@@ -534,6 +534,9 @@ if TRAIN_ENCODER:
 def build_image_resizer():
     input_layer = Input(shape = (64, 64, 3))
 
+    # keras lambda layer:
+    # custom layer that is not prebuilt and 
+    # does not require trainable weights
     resized_images = Lambda(lambda x: resize_images(x, 
         height_factor = 3, width_factor = 3, 
         data_format = 'channels_last'))(input_layer)
