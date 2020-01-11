@@ -18,7 +18,7 @@ from keras import Input, Model
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, BatchNormalization, Activation
 from keras.layers import Add, Conv2DTranspose
-from keras.layers ZeroPadding2D, LeakyReLU
+from keras.layers import ZeroPadding2D, LeakyReLU
 from keras.optimizers import Adam
 from imageio import imread
 from skimage.transform import resize
