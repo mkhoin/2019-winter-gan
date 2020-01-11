@@ -155,6 +155,9 @@ def build_generator():
 
 
 # custom keras layer for dimension expansion
+# (?, 6) -> (?, 1, 6) -> (?, 1, 1, 6) -> (?, 32, 32, 6)
+# works the same way as numpy.expand_dims()
+# inserts a new dimension “at the given axis”
 def expand_label(x):
     x = tf.expand_dims(x, axis = 1)
     x = tf.expand_dims(x, axis = 1)
