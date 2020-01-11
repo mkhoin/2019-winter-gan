@@ -11,6 +11,7 @@ import os
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
 
 from datetime import datetime
 from keras import Input, Model
@@ -21,7 +22,6 @@ from keras.layers import BatchNormalization
 
 from keras.layers import Reshape, concatenate, LeakyReLU, Lambda
 from keras.layers import Activation, UpSampling2D, Dropout
-from keras import backend as K
 from keras.optimizers import Adam
 from keras.utils import to_categorical
 from keras.preprocessing import image
@@ -156,9 +156,9 @@ def build_generator():
 
 # custom keras layer for dimension expansion
 def expand_label(x):
-    x = K.expand_dims(x, axis = 1)
-    x = K.expand_dims(x, axis = 1)
-    x = K.tile(x, [1, 32, 32, 1])
+    x = tf.expand_dims(x, axis = 1)
+    x = tf.expand_dims(x, axis = 1)
+    x = tf.tile(x, [1, 32, 32, 1])
 
     return x
 
@@ -314,7 +314,7 @@ def load_image(image_paths, image_shape):
 # y_pred: tensor of the same shape as y_true
 # return: float
 def euclidean_loss(y_true, y_pred):
-    return K.sqrt(K.sum(K.square(y_pred - y_true), axis=-1))
+    return sqrt(sum(square(y_pred - y_true), axis=-1))
 
 
 # save the given color image to the output directory
@@ -534,7 +534,7 @@ if TRAIN_ENCODER:
 def build_image_resizer():
     input_layer = Input(shape = (64, 64, 3))
 
-    resized_images = Lambda(lambda x: K.resize_images(x, 
+    resized_images = Lambda(lambda x: resize_images(x, 
         height_factor = 3, width_factor = 3, 
         data_format = 'channels_last'))(input_layer)
 
@@ -565,7 +565,7 @@ def build_fr_model(input_shape):
     # recognizer model
     input_layer = Input(shape = input_shape)
     x = embedder_model(input_layer)
-    output = Lambda(lambda x: K.l2_normalize(x, axis = -1))(x)
+    output = Lambda(lambda x: l2_normalize(x, axis = -1))(x)
     model = Model(inputs = [input_layer], outputs = [output])
 
     print('\n=== Resnet face recognizer summary')
@@ -604,7 +604,7 @@ def build_new_GAN():
     gen_images = generator([latent, input_label])
 
     # increase the image size by 3x
-    resized_images = Lambda(lambda x: K.resize_images(gen_images, 
+    resized_images = Lambda(lambda x: resize_images(gen_images, 
         height_factor = 3, width_factor = 3,
         data_format = 'channels_last'))(gen_images)
 
