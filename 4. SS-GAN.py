@@ -12,7 +12,6 @@ import numpy as np
 import os
 
 from keras.datasets import mnist
-from keras import backend as K
 from keras.layers import Activation, BatchNormalization, Concatenate, Dense
 from keras.layers import Dropout, Flatten, Input, Lambda, Reshape
 from keras.layers.advanced_activations import LeakyReLU
