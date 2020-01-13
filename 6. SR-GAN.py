@@ -13,7 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 from keras import Input
-from keras.applications import VGG19
+from keras.applications import ResNet50
 from keras.callbacks import TensorBoard
 from keras.layers import BatchNormalization, Activation
 from keras.layers import LeakyReLU, Add, Dense
@@ -102,31 +102,30 @@ def sample_images(batch_size):
 ##################
 
 
-# use pre-trained VGG model
-# it has 143 million pre-trained parameters
-def build_vgg():
+# use pre-trained ResNet50 model
+def build_resnet():
 
     # load pre-trained VGG19 model trained on 'Imagenet' dataset
     # need to decide which layer to use for the output
     input_shape = HIGH_SHAPE
-    vgg = VGG19(weights = "imagenet")
-    vgg.outputs = [vgg.layers[9].output]
+    resnet = ResNet50(weights = "imagenet")
 
-    print('\n== VGG MODEL SUMMARY ==')
+    print('\n== RESNET50 MODEL SHAPES ==')
     print('Input shape:', input_shape)
 
 
-    # extract features
-    # shape is (?, 64, 64, 256)
+    # extract 1000 features
     input_layer = Input(shape = input_shape)
-    features = vgg(input_layer)
+    features = resnet(input_layer)
     print('Feature shape extracted:', features.shape)
 
 
     # create a Keras model
-    # we do not train VGG19 further
+    # we do not train ResNet50 further
     model = Model(inputs = [input_layer], outputs = [features])
     model.trainable = False
+
+    print('\n=== RESNET50 SUMMARY')
     model.summary()
 
     return model
@@ -260,6 +259,7 @@ def build_generator():
 
     # keras model of our generator
     model = Model(inputs = [input_layer], outputs = [output])
+    print('\n=== GENERATOR SUMMARY')
     model.summary()
 
     return model
@@ -272,7 +272,7 @@ def build_GAN():
     # build and compile VGG19 network to extract features
     # shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
     # we do not NOT need compile statement
-    vgg = build_vgg()
+    resnet = build_resnet()
 
     # build and compile the discriminator network
     # shape change: (?, 256, 256, 3) -> (?, 16, 16, 1)
@@ -298,7 +298,7 @@ def build_GAN():
 
     # 2. VGG19 accepts fake images produced by generator
     # and extract their feature maps
-    features = vgg(fake_high)
+    features = resnet(fake_high)
 
     # we initially set the discriminator non-trainable
     discriminator.trainable = False
@@ -318,6 +318,8 @@ def build_GAN():
     gan_model.compile(loss = ['binary_crossentropy', 'mse'], 
             loss_weights = [0.001, 1], optimizer = MY_OPT)
 
+    print('\n=== GAN SUMMARY')
+    gan_model.summary()
 
     # add tensorboard to plot loss curves
     # tensorboard --logdir=logs
@@ -326,7 +328,7 @@ def build_GAN():
     tensorboard.set_model(generator)
     tensorboard.set_model(discriminator)
 
-    return vgg, discriminator, generator, gan_model, tensorboard
+    return resnet, discriminator, generator, gan_model, tensorboard
 
 
 ##################
@@ -398,7 +400,7 @@ def train_G():
 
     # extract feature maps for real high-resolution images
     # VGG shape change: (?, 256, 256, 3) -> (?, 64, 64, 256)
-    real_features = vgg.predict(real_high)
+    real_features = resnet.predict(real_high)
     real_labels = np.ones(DIS_ANS)
 
 
@@ -464,7 +466,7 @@ def evaluate_GAN(generator, discriminator, epoch):
 # overall GAN training
 # we alternate between discriminator and generator training 
 # during generator training, discriminator is not trained
-def train_GAN(vgg, discriminator, generator, gan_model, TB):
+def train_GAN(resnet, discriminator, generator, gan_model, TB):
     print('\n== GAN TRAINING STARTS ==')
 
     # repeat epochs
@@ -521,8 +523,8 @@ def gan_prediction():
 # if training is not done, we do training and save the models
 # otherwise, we use the saved models to do prediction
 if not TRAINING_DONE:
-    vgg, discriminator, generator, gan_model, tensorboard = build_GAN()
-    train_GAN(vgg, discriminator, generator, gan_model, tensorboard)
+    resnet, discriminator, generator, gan_model, tensorboard = build_GAN()
+    train_GAN(resnet, discriminator, generator, gan_model, tensorboard)
 
 else:
     gan_prediction()
