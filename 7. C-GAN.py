@@ -15,7 +15,7 @@ import tensorflow as tf
 
 from datetime import datetime
 from keras import Input, Model
-from keras.applications import InceptionResNetV2
+from keras.applications import MobileNet
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Flatten, Dense
 from keras.layers import BatchNormalization, K
@@ -40,21 +40,22 @@ if not os.path.exists(OUT_DIR):
 
 
 # hyper-parameters and constants
-epochs = 2
+epochs = 10
 batch_size = 100
 noise = 100
 num_class = 6
 num_data = 1000
 DB_NAME = '1000-data.mat'
 image_shape = (64, 64, 3)
-fr_image_shape = (192, 192, 3)
+#fr_image_shape = (192, 192, 3)
+fr_image_shape = (64, 64, 3)
 
 
 # program control option 1: on-off-off
 # program control option 2: on-on-off then off-off-on
-TRAIN_GAN = True
+TRAIN_GAN = False
 TRAIN_ENCODER = False
-TRAIN_GAN_WITH_FR = False
+TRAIN_GAN_WITH_FR = True
 
 
 # encoder network
@@ -87,7 +88,7 @@ def build_encoder():
     enc = Flatten()(enc)
 
     # 1st fully connected layer
-    enc = Dense(4096)(enc)
+    enc = Dense(256)(enc)
     enc = BatchNormalization()(enc)
     enc = LeakyReLU(alpha = 0.2)(enc)
 
@@ -113,30 +114,31 @@ def build_generator():
     x = concatenate([input_noise, input_label])
 
     # 1st fully connected layer
-    x = Dense(2048, input_dim = noise + num_class)(x)
+    x = Dense(256, input_dim = noise + num_class)(x)
     x = LeakyReLU(alpha = 0.2)(x)
     x = Dropout(0.2)(x)
 
     # 2nd fully connected layer
-    x = Dense(256 * 8 * 8)(x)
+    x = Dense(8 * 8 * 32)(x)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha = 0.2)(x)
     x = Dropout(0.2)(x)
 
     # reshaping to enter convolution layer
-    x = Reshape((8, 8, 256))(x)
+    # dimenion becomes 8 x 8 x 128
+    x = Reshape((8, 8, 32))(x)
 
     # 1st upscaling and convolution block
     # dimension becomes 16 x 16 x 128
     x = UpSampling2D(size = (2, 2))(x)
-    x = Conv2D(128, kernel_size = 5, padding = 'same')(x)
+    x = Conv2D(32, kernel_size = 5, padding = 'same')(x)
     x = BatchNormalization(momentum = 0.8)(x)
     x = LeakyReLU(alpha = 0.2)(x)
 
     # 2nd upscaling and convolution block
     # dimension becomes 32 x 32 x 64
     x = UpSampling2D(size = (2, 2))(x)
-    x = Conv2D(64, kernel_size = 5, padding = 'same')(x)
+    x = Conv2D(32, kernel_size = 5, padding = 'same')(x)
     x = BatchNormalization(momentum = 0.8)(x)
     x = LeakyReLU(alpha = 0.2)(x)
 
@@ -188,23 +190,23 @@ def build_discriminator():
 
     # 2nd convolution block
     # dimension becomes 16 x 16 x 128
-    x = Conv2D(128, kernel_size = 3, strides = 2, padding = 'same')(x)
+    x = Conv2D(32, kernel_size = 3, strides = 2, padding = 'same')(x)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha = 0.2)(x)
 
     # 3rd convolution block
     # dimension becomes 8 x 8 x 256
-    x = Conv2D(256, kernel_size = 3, strides = 2, padding = 'same')(x)
+    x = Conv2D(64, kernel_size = 3, strides = 2, padding = 'same')(x)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha = 0.2)(x)
 
     # 4th convolution block
     # dimension becomes 4 x 4 x 512
-    x = Conv2D(512, kernel_size = 3, strides = 2, padding = 'same')(x)
+    x = Conv2D(64, kernel_size = 3, strides = 2, padding = 'same')(x)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha = 0.2)(x)
 
-    # flattened to get 8192 neurons
+    # flattened list of nerons 
     x = Flatten()(x)
 
     # final output is single value
@@ -533,7 +535,7 @@ def build_image_resizer():
     # custom layer that is not prebuilt and 
     # does not require trainable weights
     resized_images = Lambda(lambda x: K.resize_images(x, 
-        height_factor = 3, width_factor = 3, 
+        height_factor = 1, width_factor = 1, 
         data_format = 'channels_last'))(input_layer)
 
     model = Model(input = [input_layer], outputs = [resized_images])
@@ -551,7 +553,7 @@ def build_image_resizer():
 def build_fr_model(input_shape):
 
     # borrow resnet
-    resnet_model = InceptionResNetV2(include_top = False, weights = 'imagenet', 
+    resnet_model = MobileNet(include_top = False, weights = None, 
         input_shape = input_shape, pooling = 'avg')
 
     # embedder model
@@ -603,7 +605,7 @@ def build_new_GAN():
 
     # increase the image size by 3x
     resized_images = Lambda(lambda x: K.resize_images(gen_images, 
-        height_factor = 3, width_factor = 3,
+        height_factor = 1, width_factor = 1,
         data_format = 'channels_last'))(gen_images)
 
     # give the enlarged image to resnet to obtain 128 features
