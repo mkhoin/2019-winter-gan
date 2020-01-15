@@ -203,9 +203,7 @@ def gen_train(real):
 
     # generate a batch of fake images
     z = np.random.normal(0, 1, (batch_size, noise))
-    gen_imgs = generator.predict(z)
 
-    # train generator
     # we want discriminator to say this is real
     # note that discriminator weights are fixed here
     # but generator weights are changing

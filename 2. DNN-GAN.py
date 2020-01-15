@@ -161,7 +161,6 @@ def train_GAN():
         # note we train the entire gan but fix discriminator weights
         # we fool discriminator that generator is producing real images
         # generator does not generate accuracy
-        discriminator.trainable = False
         g_loss = gan.train_on_batch(z, real)
 
         ##########################
