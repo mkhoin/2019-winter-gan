@@ -338,7 +338,7 @@ discriminator.trainable = False
 
 # build and compile generator 
 generator = build_generator()
-generator.compile(loss = ['binary_crossentropy'], optimizer = 'adam')
+
 
 # build and compile GAN
 input_noise = Input(shape = (100,))
