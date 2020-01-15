@@ -83,6 +83,7 @@ def build_D():
 
 
 # CNN generator definition
+# note that we do NOT compile generator
 def build_G():
     G = models.Sequential()
     G.add(Reshape((NUM_DATA, 1), input_shape = (NUM_DATA,)))
@@ -90,7 +91,7 @@ def build_G():
     G.add(Conv1D(G_SIZE, 1, activation = 'sigmoid'))
     G.add(Conv1D(1, 1))
     G.add(Flatten())
-    model_compile(G)
+
 
     print('\n== GENERTOR MODEL DETAILS ==')
     G.summary()
@@ -127,7 +128,6 @@ def train_epochs(gan, dis, gen):
             Z = in_sample()
 
             fake = gen.predict(Z)
-            dis.trainable = True
             X = np.concatenate([real, fake], axis = 0)
             y = np.array([1] * MY_BATCH + [0] * MY_BATCH)
             dis.train_on_batch(X, y)
@@ -138,7 +138,6 @@ def train_epochs(gan, dis, gen):
         # goal is to fool discriminator
         for i in range(G_LEARN):
             Z = in_sample()
-            dis.trainable = False
             y = np.array([1] * MY_BATCH)
             gan.train_on_batch(Z, y)
 
